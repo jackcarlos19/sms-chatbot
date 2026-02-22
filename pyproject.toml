@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sms-chatbot"
+version = "0.1.0"
+description = "SMS chatbot service scaffold"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "sqlalchemy[asyncio]",
+  "asyncpg",
+  "alembic",
+  "twilio",
+  "anthropic",
+  "redis",
+  "arq",
+  "pydantic-settings",
+  "structlog",
+  "pytest",
+  "pytest-asyncio",
+  "httpx",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

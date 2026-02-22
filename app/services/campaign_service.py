@@ -15,7 +15,9 @@ from app.models.contact import Contact
 
 
 class CampaignService:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:
+    def __init__(
+        self, session_factory: async_sessionmaker[AsyncSession] | None = None
+    ) -> None:
         self._session_factory = session_factory or AsyncSessionFactory
         self._settings = get_settings()
 
@@ -49,13 +51,17 @@ class CampaignService:
                 await session.flush()
                 return campaign
 
-    async def schedule_campaign(self, campaign_id: uuid.UUID, send_at: datetime, ctx: dict | None = None) -> Campaign:
+    async def schedule_campaign(
+        self, campaign_id: uuid.UUID, send_at: datetime, ctx: dict | None = None
+    ) -> Campaign:
         if send_at <= datetime.now(timezone.utc):
             raise ValueError("send_at must be in the future")
 
         async with self._session_factory() as session:
             async with session.begin():
-                result = await session.execute(select(Campaign).where(Campaign.id == campaign_id))
+                result = await session.execute(
+                    select(Campaign).where(Campaign.id == campaign_id)
+                )
                 campaign = result.scalar_one()
                 campaign.status = "scheduled"
                 campaign.scheduled_at = send_at
@@ -63,41 +69,62 @@ class CampaignService:
 
         if ctx and "redis" in ctx:
             delay = max(0, int((send_at - datetime.now(timezone.utc)).total_seconds()))
-            await ctx["redis"].enqueue_job("execute_campaign", str(campaign_id), _defer_by=delay)
+            await ctx["redis"].enqueue_job(
+                "execute_campaign", str(campaign_id), _defer_by=delay
+            )
         return campaign
 
-    async def execute_campaign(self, campaign_id: uuid.UUID, ctx: dict | None = None) -> None:
+    async def execute_campaign(
+        self, campaign_id: uuid.UUID, ctx: dict | None = None
+    ) -> None:
         if ctx and "redis" in ctx:
-            await ctx["redis"].enqueue_job("process_campaign_batch", str(campaign_id), 0, 50)
+            await ctx["redis"].enqueue_job(
+                "process_campaign_batch", str(campaign_id), 0, 50
+            )
 
     async def pause_campaign(self, campaign_id: uuid.UUID) -> Campaign:
         return await self._update_status(campaign_id, "paused")
 
-    async def resume_campaign(self, campaign_id: uuid.UUID, ctx: dict | None = None) -> Campaign:
+    async def resume_campaign(
+        self, campaign_id: uuid.UUID, ctx: dict | None = None
+    ) -> Campaign:
         campaign = await self._update_status(campaign_id, "active")
         if ctx and "redis" in ctx:
-            await ctx["redis"].enqueue_job("process_campaign_batch", str(campaign_id), 0, 50)
+            await ctx["redis"].enqueue_job(
+                "process_campaign_batch", str(campaign_id), 0, 50
+            )
         return campaign
 
     async def get_campaign_stats(self, campaign_id: uuid.UUID) -> dict[str, int]:
         async with self._session_factory() as session:
             total = await session.scalar(
-                select(func.count()).select_from(CampaignRecipient).where(CampaignRecipient.campaign_id == campaign_id)
+                select(func.count())
+                .select_from(CampaignRecipient)
+                .where(CampaignRecipient.campaign_id == campaign_id)
             )
             sent = await session.scalar(
                 select(func.count())
                 .select_from(CampaignRecipient)
-                .where(CampaignRecipient.campaign_id == campaign_id, CampaignRecipient.status == "sent")
+                .where(
+                    CampaignRecipient.campaign_id == campaign_id,
+                    CampaignRecipient.status == "sent",
+                )
             )
             delivered = await session.scalar(
                 select(func.count())
                 .select_from(CampaignRecipient)
-                .where(CampaignRecipient.campaign_id == campaign_id, CampaignRecipient.status == "delivered")
+                .where(
+                    CampaignRecipient.campaign_id == campaign_id,
+                    CampaignRecipient.status == "delivered",
+                )
             )
             failed = await session.scalar(
                 select(func.count())
                 .select_from(CampaignRecipient)
-                .where(CampaignRecipient.campaign_id == campaign_id, CampaignRecipient.status == "failed")
+                .where(
+                    CampaignRecipient.campaign_id == campaign_id,
+                    CampaignRecipient.status == "failed",
+                )
             )
             return {
                 "total_recipients": int(total or 0),
@@ -117,13 +144,17 @@ class CampaignService:
     async def _update_status(self, campaign_id: uuid.UUID, status: str) -> Campaign:
         async with self._session_factory() as session:
             async with session.begin():
-                result = await session.execute(select(Campaign).where(Campaign.id == campaign_id))
+                result = await session.execute(
+                    select(Campaign).where(Campaign.id == campaign_id)
+                )
                 campaign = result.scalar_one()
                 campaign.status = status
                 await session.flush()
                 return campaign
 
-    async def _resolve_recipients(self, session: AsyncSession, recipient_filter: dict[str, Any]) -> list[Contact]:
+    async def _resolve_recipients(
+        self, session: AsyncSession, recipient_filter: dict[str, Any]
+    ) -> list[Contact]:
         query = select(Contact)
         opt_in = recipient_filter.get("opt_in_status", "opted_in")
         query = query.where(Contact.opt_in_status == opt_in)

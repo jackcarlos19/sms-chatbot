@@ -31,7 +31,9 @@ async def seed() -> None:
 
     async with AsyncSessionFactory() as session:
         for start_time, end_time in target_slots:
-            existing_query: Select[tuple[AvailabilitySlot]] = select(AvailabilitySlot).where(
+            existing_query: Select[tuple[AvailabilitySlot]] = select(
+                AvailabilitySlot
+            ).where(
                 AvailabilitySlot.start_time == start_time,
                 AvailabilitySlot.end_time == end_time,
                 AvailabilitySlot.provider_id.is_(None),

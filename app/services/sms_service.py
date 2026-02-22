@@ -34,7 +34,9 @@ class SMSService:
         )
         self._validator = RequestValidator(self._settings.twilio_auth_token)
 
-    def validate_signature(self, url: str, params: dict[str, str], signature: str) -> bool:
+    def validate_signature(
+        self, url: str, params: dict[str, str], signature: str
+    ) -> bool:
         return self._validator.validate(url, params, signature or "")
 
     async def send_message(
@@ -119,7 +121,11 @@ class SMSService:
         raise RuntimeError("Failed to send message after retries")
 
     async def handle_inbound(self, from_number: str, body: str, sms_sid: str) -> None:
-        logger.info("inbound_sms_received", from_number=mask_phone_number(from_number), sms_sid=sms_sid)
+        logger.info(
+            "inbound_sms_received",
+            from_number=mask_phone_number(from_number),
+            sms_sid=sms_sid,
+        )
         async with AsyncSessionFactory() as session:
             contact = await self._get_or_create_contact(session, from_number)
             inbound_message = Message(
@@ -162,7 +168,9 @@ class SMSService:
         error_message: str | None = None,
     ) -> None:
         async with AsyncSessionFactory() as session:
-            message_result = await session.execute(select(Message).where(Message.sms_sid == sms_sid))
+            message_result = await session.execute(
+                select(Message).where(Message.sms_sid == sms_sid)
+            )
             message = message_result.scalar_one_or_none()
             if message is None:
                 logger.warning("status_update_missing_message", sms_sid=sms_sid)
@@ -174,7 +182,9 @@ class SMSService:
             await session.commit()
 
     async def _get_or_create_contact(self, session: Any, phone_number: str) -> Contact:
-        result = await session.execute(select(Contact).where(Contact.phone_number == phone_number))
+        result = await session.execute(
+            select(Contact).where(Contact.phone_number == phone_number)
+        )
         contact = result.scalar_one_or_none()
         if contact is not None:
             return contact

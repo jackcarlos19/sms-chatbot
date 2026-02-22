@@ -30,7 +30,9 @@ def _tool_response(function_name: str, payload: dict) -> SimpleNamespace:
 
 
 class FakeCompletions:
-    def __init__(self, response: SimpleNamespace | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self, response: SimpleNamespace | None = None, error: Exception | None = None
+    ) -> None:
         self._response = response
         self._error = error
 
@@ -41,8 +43,12 @@ class FakeCompletions:
 
 
 class FakeClient:
-    def __init__(self, response: SimpleNamespace | None = None, error: Exception | None = None) -> None:
-        self.chat = SimpleNamespace(completions=FakeCompletions(response=response, error=error))
+    def __init__(
+        self, response: SimpleNamespace | None = None, error: Exception | None = None
+    ) -> None:
+        self.chat = SimpleNamespace(
+            completions=FakeCompletions(response=response, error=error)
+        )
 
 
 @pytest.mark.asyncio
@@ -52,7 +58,10 @@ async def test_detect_intent_returns_structured_result() -> None:
         {
             "intent": "BOOK",
             "confidence": 0.95,
-            "extracted_data": {"date_preference": "2026-03-15", "time_preference": "afternoon"},
+            "extracted_data": {
+                "date_preference": "2026-03-15",
+                "time_preference": "afternoon",
+            },
             "response_text": "I can help with that. Let me check next Tuesday afternoon.",
             "needs_info": ["time"],
         },
@@ -86,7 +95,9 @@ async def test_detect_intent_fallback_on_error() -> None:
 
 @pytest.mark.asyncio
 async def test_parse_slot_selection_handles_numeric_and_ordinal() -> None:
-    service = AIService(client=FakeClient(response=_tool_response("select_slot", {"slot_id": None})))
+    service = AIService(
+        client=FakeClient(response=_tool_response("select_slot", {"slot_id": None}))
+    )
     slots = [
         {"id": "slot-1", "start_time": "2026-03-15T14:00:00+00:00"},
         {"id": "slot-2", "start_time": "2026-03-15T15:30:00+00:00"},
@@ -94,7 +105,9 @@ async def test_parse_slot_selection_handles_numeric_and_ordinal() -> None:
     ]
 
     assert await service.parse_slot_selection("2", slots) == "slot-2"
-    assert await service.parse_slot_selection("the second one please", slots) == "slot-2"
+    assert (
+        await service.parse_slot_selection("the second one please", slots) == "slot-2"
+    )
 
 
 @pytest.mark.asyncio
@@ -121,7 +134,12 @@ def test_history_is_capped_to_last_ten_messages() -> None:
 
 def test_generate_slot_and_confirmation_text() -> None:
     service = AIService(client=FakeClient(response=_tool_response("submit_intent", {})))
-    slots = [{"id": "slot-1", "start_time": datetime(2026, 3, 15, 14, 0, tzinfo=timezone.utc)}]
+    slots = [
+        {
+            "id": "slot-1",
+            "start_time": datetime(2026, 3, 15, 14, 0, tzinfo=timezone.utc),
+        }
+    ]
 
     presentation = service.generate_slot_presentation(slots, "America/New_York")
     confirmation = service.generate_confirmation(

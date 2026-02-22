@@ -23,7 +23,9 @@ class ConversationState(Base):
     contact_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id"), unique=True, nullable=False
     )
-    current_state: Mapped[str] = mapped_column(String(50), server_default=text("'idle'"))
+    current_state: Mapped[str] = mapped_column(
+        String(50), server_default=text("'idle'")
+    )
     context: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         server_default=text("'{}'::jsonb"),

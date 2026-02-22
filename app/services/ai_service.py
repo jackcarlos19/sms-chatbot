@@ -53,7 +53,9 @@ class AIService:
         conversation_state: str = "idle",
         contact_timezone: str = "UTC",
     ) -> IntentResult:
-        context_section = self._build_context_section(available_slots, current_appointment)
+        context_section = self._build_context_section(
+            available_slots, current_appointment
+        )
         system_prompt = (
             f"You are a friendly SMS scheduling assistant for {self._settings.business_name}. "
             "Keep responses concise under 320 chars when possible and max 480 chars. "
@@ -80,7 +82,10 @@ class AIService:
                             "confidence": {"type": "number"},
                             "extracted_data": {"type": "object"},
                             "response_text": {"type": "string"},
-                            "needs_info": {"type": "array", "items": {"type": "string"}},
+                            "needs_info": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
                         },
                         "required": [
                             "intent",
@@ -164,7 +169,10 @@ class AIService:
                 dt_local.strftime("%-I:%M%p").lower(),
                 dt_local.strftime("%H:%M").lower(),
             }
-            day_tokens = {dt_local.strftime("%A").lower(), dt_local.strftime("%a").lower()}
+            day_tokens = {
+                dt_local.strftime("%A").lower(),
+                dt_local.strftime("%a").lower(),
+            }
             compact_message = normalized.replace(" ", "")
             if any(token.replace(" ", "") in compact_message for token in time_tokens):
                 time_matches.append(slot_id)
@@ -226,10 +234,14 @@ class AIService:
             valid_ids = {str(slot["id"]) for slot in presented_slots}
             return str(selected) if str(selected) in valid_ids else None
         except Exception as exc:  # noqa: BLE001
-            logger.exception("ai_parse_slot_selection_failed", extra={"error": str(exc)})
+            logger.exception(
+                "ai_parse_slot_selection_failed", extra={"error": str(exc)}
+            )
             return None
 
-    def generate_slot_presentation(self, slots: list[dict[str, Any]], timezone_name: str) -> str:
+    def generate_slot_presentation(
+        self, slots: list[dict[str, Any]], timezone_name: str
+    ) -> str:
         if not slots:
             return "I don't have open slots right now. Would you like me to check again later?"
 
@@ -242,7 +254,9 @@ class AIService:
         lines.append("Reply with a number to book.")
         return self._truncate("\n".join(lines))
 
-    def generate_confirmation(self, appointment: dict[str, Any], timezone_name: str) -> str:
+    def generate_confirmation(
+        self, appointment: dict[str, Any], timezone_name: str
+    ) -> str:
         start = (
             appointment.get("start_time")
             or appointment.get("slot", {}).get("start_time")
@@ -265,7 +279,9 @@ class AIService:
         }
         return self._truncate(responses.get(error_type, FALLBACK_TEXT))
 
-    def _prepare_history(self, conversation_history: list[dict[str, Any]]) -> list[dict[str, str]]:
+    def _prepare_history(
+        self, conversation_history: list[dict[str, Any]]
+    ) -> list[dict[str, str]]:
         limited = conversation_history[-10:]
         trimmed: list[dict[str, str]] = []
         token_budget = 2000

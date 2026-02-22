@@ -27,7 +27,13 @@ class FakeAIService:
         conversation_state: str = "idle",
         contact_timezone: str = "UTC",
     ) -> IntentResult:
-        _ = (conversation_history, available_slots, current_appointment, conversation_state, contact_timezone)
+        _ = (
+            conversation_history,
+            available_slots,
+            current_appointment,
+            conversation_state,
+            contact_timezone,
+        )
         self.detect_calls += 1
         if self.raise_if_called:
             raise AssertionError("AI should not be called for compliance keywords.")
@@ -47,7 +53,9 @@ class FakeAIService:
             return IntentResult("BOOK", 0.95, {}, "Let's book.", [])
         return IntentResult("QUESTION", 0.7, {}, "Could you share more details?", [])
 
-    async def parse_slot_selection(self, message: str, presented_slots: list[dict[str, Any]]) -> str | None:
+    async def parse_slot_selection(
+        self, message: str, presented_slots: list[dict[str, Any]]
+    ) -> str | None:
         text = (message or "").strip().lower()
         if not presented_slots:
             return None
@@ -61,7 +69,9 @@ class FakeAIService:
             return str(presented_slots[1]["slot_id"])
         return None
 
-    def generate_slot_presentation(self, slots: list[dict[str, Any]], timezone_name: str) -> str:
+    def generate_slot_presentation(
+        self, slots: list[dict[str, Any]], timezone_name: str
+    ) -> str:
         _ = timezone_name
         lines = ["Here are some available times:"]
         for idx, slot in enumerate(slots, start=1):
@@ -69,7 +79,9 @@ class FakeAIService:
         lines.append("Reply with a number to book.")
         return "\n".join(lines)
 
-    def generate_confirmation(self, appointment: dict[str, Any], timezone_name: str) -> str:
+    def generate_confirmation(
+        self, appointment: dict[str, Any], timezone_name: str
+    ) -> str:
         _ = timezone_name
         start = appointment.get("start_time")
         return f"You're all set! Your appointment is confirmed for {start}."
@@ -79,8 +91,21 @@ class FakeSMSService:
     def __init__(self) -> None:
         self.sent: list[dict[str, Any]] = []
 
-    async def send_message(self, to: str, body: str, force_send: bool = False, campaign_id: str | None = None):
-        self.sent.append({"to": to, "body": body, "force_send": force_send, "campaign_id": campaign_id})
+    async def send_message(
+        self,
+        to: str,
+        body: str,
+        force_send: bool = False,
+        campaign_id: str | None = None,
+    ):
+        self.sent.append(
+            {
+                "to": to,
+                "body": body,
+                "force_send": force_send,
+                "campaign_id": campaign_id,
+            }
+        )
         return SimpleNamespace()
 
 
@@ -121,14 +146,18 @@ class FakeSchedulingService:
         self.appointments[appt.id] = appt
         return appt
 
-    async def cancel_appointment(self, appointment_id: uuid.UUID, reason: str | None = None):
+    async def cancel_appointment(
+        self, appointment_id: uuid.UUID, reason: str | None = None
+    ):
         _ = reason
         appt = self.appointments[appointment_id]
         appt.status = "cancelled"
         self.slots[appt.slot_id].is_available = True
         return appt
 
-    async def reschedule_appointment(self, appointment_id: uuid.UUID, new_slot_id: uuid.UUID):
+    async def reschedule_appointment(
+        self, appointment_id: uuid.UUID, new_slot_id: uuid.UUID
+    ):
         old = self.appointments[appointment_id]
         new_slot = self.slots[new_slot_id]
         if not new_slot.is_available:
@@ -156,14 +185,25 @@ class FakeSchedulingService:
     ) -> list[SimpleNamespace]:
         _ = (date_from, provider_id)
         excluded = set(exclude_slot_ids)
-        choices = [s for s in self.slots.values() if s.is_available and s.id not in excluded]
+        choices = [
+            s for s in self.slots.values() if s.is_available and s.id not in excluded
+        ]
         choices.sort(key=lambda s: s.start_time)
         return choices[:limit]
 
 
 class InMemoryConversationService(ConversationService):
-    def __init__(self, ai_service: FakeAIService, scheduling_service: FakeSchedulingService, sms_service: FakeSMSService):
-        super().__init__(ai_service=ai_service, scheduling_service=scheduling_service, sms_service=sms_service)
+    def __init__(
+        self,
+        ai_service: FakeAIService,
+        scheduling_service: FakeSchedulingService,
+        sms_service: FakeSMSService,
+    ):
+        super().__init__(
+            ai_service=ai_service,
+            scheduling_service=scheduling_service,
+            sms_service=sms_service,
+        )
         self.contacts_by_phone: dict[str, SimpleNamespace] = {}
         self.states_by_contact: dict[uuid.UUID, SimpleNamespace] = {}
 
@@ -216,9 +256,15 @@ class InMemoryConversationService(ConversationService):
 def service_bundle():
     now = datetime.now(timezone.utc)
     slots = {
-        uuid.uuid4(): SimpleNamespace(id=uuid.uuid4(), start_time=now + timedelta(hours=1), is_available=True),
-        uuid.uuid4(): SimpleNamespace(id=uuid.uuid4(), start_time=now + timedelta(hours=2), is_available=True),
-        uuid.uuid4(): SimpleNamespace(id=uuid.uuid4(), start_time=now + timedelta(hours=3), is_available=True),
+        uuid.uuid4(): SimpleNamespace(
+            id=uuid.uuid4(), start_time=now + timedelta(hours=1), is_available=True
+        ),
+        uuid.uuid4(): SimpleNamespace(
+            id=uuid.uuid4(), start_time=now + timedelta(hours=2), is_available=True
+        ),
+        uuid.uuid4(): SimpleNamespace(
+            id=uuid.uuid4(), start_time=now + timedelta(hours=3), is_available=True
+        ),
     }
     # Normalize keys and ids.
     normalized_slots: dict[uuid.UUID, SimpleNamespace] = {}
@@ -228,7 +274,9 @@ def service_bundle():
     ai = FakeAIService()
     sms = FakeSMSService()
     scheduling = FakeSchedulingService(slots=normalized_slots)
-    service = InMemoryConversationService(ai_service=ai, scheduling_service=scheduling, sms_service=sms)
+    service = InMemoryConversationService(
+        ai_service=ai, scheduling_service=scheduling, sms_service=sms
+    )
     return service, ai, sms, scheduling
 
 
@@ -334,7 +382,10 @@ async def test_full_reschedule_flow(service_bundle) -> None:
     await service.process_inbound_message(phone, "yes", "SM10")
     state = service.states_by_contact[contact.id]
     assert state.current_state == "idle"
-    assert any(appt_obj.rescheduled_from_id == appt.id for appt_obj in scheduling.appointments.values())
+    assert any(
+        appt_obj.rescheduled_from_id == appt.id
+        for appt_obj in scheduling.appointments.values()
+    )
     assert new_slot.is_available is False
     assert old_slot.is_available is True
 

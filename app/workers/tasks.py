@@ -36,14 +36,18 @@ async def expire_conversations(ctx: dict) -> int:  # noqa: ARG001
         return len(expired)
 
 
-async def process_campaign_batch(ctx: dict, campaign_id: str, offset: int, batch_size: int = 50) -> int:
+async def process_campaign_batch(
+    ctx: dict, campaign_id: str, offset: int, batch_size: int = 50
+) -> int:
     sms_service = SMSService()
     campaign_service = CampaignService()
     processed = 0
     campaign_uuid = uuid.UUID(str(campaign_id))
 
     async with AsyncSessionFactory() as session:
-        campaign_result = await session.execute(select(Campaign).where(Campaign.id == campaign_uuid))
+        campaign_result = await session.execute(
+            select(Campaign).where(Campaign.id == campaign_uuid)
+        )
         campaign = campaign_result.scalar_one_or_none()
         if campaign is None or campaign.status == "paused":
             return 0
@@ -61,7 +65,9 @@ async def process_campaign_batch(ctx: dict, campaign_id: str, offset: int, batch
 
         delayed = False
         for recipient in recipients:
-            contact_result = await session.execute(select(Contact).where(Contact.id == recipient.contact_id))
+            contact_result = await session.execute(
+                select(Contact).where(Contact.id == recipient.contact_id)
+            )
             contact = contact_result.scalar_one_or_none()
             if contact is None or contact.opt_in_status != "opted_in":
                 recipient.status = "skipped"
@@ -108,7 +114,9 @@ async def process_campaign_batch(ctx: dict, campaign_id: str, offset: int, batch
             await asyncio.sleep(1)
 
     if "redis" in ctx and not delayed and len(recipients) == batch_size:
-        await ctx["redis"].enqueue_job("process_campaign_batch", campaign_id, offset + batch_size, batch_size)
+        await ctx["redis"].enqueue_job(
+            "process_campaign_batch", campaign_id, offset + batch_size, batch_size
+        )
     return processed
 
 
@@ -126,7 +134,9 @@ async def retry_failed_sends(ctx: dict) -> int:
         )
         queued = queued_result.scalars().all()
         for msg in queued:
-            contact_result = await session.execute(select(Contact).where(Contact.id == msg.contact_id))
+            contact_result = await session.execute(
+                select(Contact).where(Contact.id == msg.contact_id)
+            )
             contact = contact_result.scalar_one_or_none()
             if contact is None:
                 continue
@@ -148,6 +158,8 @@ async def retry_failed_sends(ctx: dict) -> int:
 class WorkerSettings:
     functions = [expire_conversations, process_campaign_batch, retry_failed_sends]
     cron_jobs = [
-        cron(expire_conversations, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+        cron(
+            expire_conversations, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}
+        ),
         cron(retry_failed_sends, minute={0, 10, 20, 30, 40, 50}),
     ]

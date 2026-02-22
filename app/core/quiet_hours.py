@@ -43,6 +43,8 @@ def seconds_until_quiet_hours_end(
     if local_time < quiet_end:
         end_dt = datetime.combine(local_now.date(), quiet_end, tzinfo=local_now.tzinfo)
     else:
-        end_dt = datetime.combine(local_now.date() + timedelta(days=1), quiet_end, tzinfo=local_now.tzinfo)
+        end_dt = datetime.combine(
+            local_now.date() + timedelta(days=1), quiet_end, tzinfo=local_now.tzinfo
+        )
 
     return max(0, int((end_dt - local_now).total_seconds()))

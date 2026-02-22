@@ -19,7 +19,9 @@ def test_is_compliance_keyword_help() -> None:
 
 
 def test_handle_stop_message_and_contact_update() -> None:
-    contact = SimpleNamespace(opt_in_status="opted_in", opt_in_date=None, opt_out_date=None)
+    contact = SimpleNamespace(
+        opt_in_status="opted_in", opt_in_date=None, opt_out_date=None
+    )
     response = handle_compliance(
         contact=contact,
         keyword_type="opt_out",
@@ -35,7 +37,9 @@ def test_handle_stop_message_and_contact_update() -> None:
 
 
 def test_handle_start_message_and_contact_update() -> None:
-    contact = SimpleNamespace(opt_in_status="opted_out", opt_in_date=None, opt_out_date=None)
+    contact = SimpleNamespace(
+        opt_in_status="opted_out", opt_in_date=None, opt_out_date=None
+    )
     response = handle_compliance(
         contact=contact,
         keyword_type="opt_in",
@@ -44,11 +48,16 @@ def test_handle_start_message_and_contact_update() -> None:
     )
     assert contact.opt_in_status == "opted_in"
     assert contact.opt_in_date is not None
-    assert response == "You have been re-subscribed to Acme Services messages. Reply STOP to unsubscribe."
+    assert (
+        response
+        == "You have been re-subscribed to Acme Services messages. Reply STOP to unsubscribe."
+    )
 
 
 def test_handle_help_message() -> None:
-    contact = SimpleNamespace(opt_in_status="opted_in", opt_in_date=None, opt_out_date=None)
+    contact = SimpleNamespace(
+        opt_in_status="opted_in", opt_in_date=None, opt_out_date=None
+    )
     response = handle_compliance(
         contact=contact,
         keyword_type="help",

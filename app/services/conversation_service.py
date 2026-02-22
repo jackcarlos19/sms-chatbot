@@ -44,14 +44,20 @@ class ConversationService:
         self._scheduling = scheduling_service or SchedulingService()
         self._sms = sms_service or SMSService()
 
-    async def process_inbound_message(self, phone_number: str, body: str, sms_sid: str) -> None:
+    async def process_inbound_message(
+        self, phone_number: str, body: str, sms_sid: str
+    ) -> None:
         contact = await self._get_or_create_contact(phone_number)
         normalized_body = (body or "").strip()
         normalized_upper = normalized_body.upper()
 
         # Compliance check is intentionally FIRST and short-circuits AI/state routing.
         is_keyword, keyword_type = is_compliance_keyword(normalized_body)
-        if is_keyword and keyword_type and normalized_upper in STRICT_COMPLIANCE_KEYWORDS:
+        if (
+            is_keyword
+            and keyword_type
+            and normalized_upper in STRICT_COMPLIANCE_KEYWORDS
+        ):
             response = handle_compliance(
                 contact=contact,
                 keyword_type=keyword_type,
@@ -88,7 +94,9 @@ class ConversationService:
         state.context = next_context
         state.last_message_at = datetime.now(timezone.utc)
         state.expires_at = (
-            datetime.now(timezone.utc) + timedelta(hours=2) if next_state != "idle" else None
+            datetime.now(timezone.utc) + timedelta(hours=2)
+            if next_state != "idle"
+            else None
         )
         await self._save_state(state)
 
@@ -113,7 +121,9 @@ class ConversationService:
             "awaiting_info": self._handle_awaiting_info,
         }
         handler = handlers.get(current_state, self._handle_idle)
-        return await handler(contact=contact, message=message, context=context, history=history)
+        return await handler(
+            contact=contact, message=message, context=context, history=history
+        )
 
     async def _handle_idle(
         self,
@@ -122,58 +132,92 @@ class ConversationService:
         context: dict[str, Any],
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
-        intent = await self._detect_intent(contact=contact, message=message, history=history, context=context)
+        intent = await self._detect_intent(
+            contact=contact, message=message, history=history, context=context
+        )
 
         if intent.intent == "BOOK":
             return await self._begin_booking(contact, intent, history)
 
         if intent.intent == "CANCEL":
-            appointments = await self._get_contact_appointments(contact.id, status_filter=["confirmed"])
+            appointments = await self._get_contact_appointments(
+                contact.id, status_filter=["confirmed"]
+            )
             if not appointments:
-                return "idle", "I couldn't find an active appointment to cancel.", {"retry_count": 0}
+                return (
+                    "idle",
+                    "I couldn't find an active appointment to cancel.",
+                    {"retry_count": 0},
+                )
             appt = appointments[0]
             slot = await self._get_slot(appt.slot_id)
             when_text = (
-                self._ai.generate_confirmation({"start_time": slot.start_time}, contact.timezone)
+                self._ai.generate_confirmation(
+                    {"start_time": slot.start_time}, contact.timezone
+                )
                 if slot is not None
                 else "your appointment"
             )
-            prompt = (
-                f"I found {when_text}. Reply YES to confirm cancellation or NO to keep it."
+            prompt = f"I found {when_text}. Reply YES to confirm cancellation or NO to keep it."
+            return (
+                "confirming_cancel",
+                prompt,
+                {
+                    "pending_appointment_id": str(appt.id),
+                    "retry_count": 0,
+                    "last_intent": "CANCEL",
+                },
             )
-            return "confirming_cancel", prompt, {
-                "pending_appointment_id": str(appt.id),
-                "retry_count": 0,
-                "last_intent": "CANCEL",
-            }
 
         if intent.intent == "RESCHEDULE":
-            appointments = await self._get_contact_appointments(contact.id, status_filter=["confirmed"])
+            appointments = await self._get_contact_appointments(
+                contact.id, status_filter=["confirmed"]
+            )
             if not appointments:
-                return "idle", "I couldn't find an active appointment to reschedule.", {"retry_count": 0}
+                return (
+                    "idle",
+                    "I couldn't find an active appointment to reschedule.",
+                    {"retry_count": 0},
+                )
             original = appointments[0]
             alternatives = await self._scheduling.get_fresh_alternatives(
                 exclude_slot_ids=[original.slot_id],
                 limit=5,
             )
             if not alternatives:
-                return "idle", "I don't see alternative slots right now. Please try again soon.", {"retry_count": 0}
+                return (
+                    "idle",
+                    "I don't see alternative slots right now. Please try again soon.",
+                    {"retry_count": 0},
+                )
             presented = self._serialize_presented_slots(alternatives, contact.timezone)
             prompt = self._ai.generate_slot_presentation(presented, contact.timezone)
-            return "reschedule_show_slots", prompt, {
-                "original_appointment_id": str(original.id),
-                "presented_slots": presented,
-                "retry_count": 0,
-                "last_intent": "RESCHEDULE",
-            }
+            return (
+                "reschedule_show_slots",
+                prompt,
+                {
+                    "original_appointment_id": str(original.id),
+                    "presented_slots": presented,
+                    "retry_count": 0,
+                    "last_intent": "RESCHEDULE",
+                },
+            )
 
         if intent.intent in {"QUESTION", "UNCLEAR"}:
             if intent.needs_info:
-                return "awaiting_info", intent.response_text, {
-                    "retry_count": int(context.get("retry_count", 0)),
-                    "last_intent": intent.intent,
-                }
-            return "idle", intent.response_text, {"retry_count": 0, "last_intent": intent.intent}
+                return (
+                    "awaiting_info",
+                    intent.response_text,
+                    {
+                        "retry_count": int(context.get("retry_count", 0)),
+                        "last_intent": intent.intent,
+                    },
+                )
+            return (
+                "idle",
+                intent.response_text,
+                {"retry_count": 0, "last_intent": intent.intent},
+            )
 
         if intent.intent in {"CONFIRM", "DENY", "SELECT_SLOT"}:
             return (
@@ -182,7 +226,11 @@ class ConversationService:
                 {"retry_count": 0, "last_intent": intent.intent},
             )
 
-        return "idle", intent.response_text, {"retry_count": 0, "last_intent": intent.intent}
+        return (
+            "idle",
+            intent.response_text,
+            {"retry_count": 0, "last_intent": intent.intent},
+        )
 
     async def _handle_showing_slots(
         self,
@@ -192,12 +240,18 @@ class ConversationService:
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
         presented = list(context.get("presented_slots", []))
-        intent = await self._detect_intent(contact=contact, message=message, history=history, context=context)
+        intent = await self._detect_intent(
+            contact=contact, message=message, history=history, context=context
+        )
 
         if intent.intent in {"CANCEL", "RESCHEDULE"}:
-            return await self._handle_idle(contact=contact, message=message, context=context, history=history)
+            return await self._handle_idle(
+                contact=contact, message=message, context=context, history=history
+            )
 
-        selected_slot_id = await self._ai.parse_slot_selection(message=message, presented_slots=presented)
+        selected_slot_id = await self._ai.parse_slot_selection(
+            message=message, presented_slots=presented
+        )
         if selected_slot_id is None:
             retry_count = int(context.get("retry_count", 0)) + 1
             if retry_count >= MAX_RETRIES:
@@ -235,10 +289,14 @@ class ConversationService:
         context: dict[str, Any],
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
-        intent = await self._detect_intent(contact=contact, message=message, history=history, context=context)
+        intent = await self._detect_intent(
+            contact=contact, message=message, history=history, context=context
+        )
 
         if intent.intent == "CANCEL":
-            return await self._handle_idle(contact=contact, message=message, context=context, history=history)
+            return await self._handle_idle(
+                contact=contact, message=message, context=context, history=history
+            )
 
         if intent.intent == "DENY":
             return (
@@ -260,7 +318,11 @@ class ConversationService:
 
         selected_slot = context.get("selected_slot_id")
         if not selected_slot:
-            return "showing_slots", "Let's pick a slot first. Reply with a slot number.", context
+            return (
+                "showing_slots",
+                "Let's pick a slot first. Reply with a slot number.",
+                context,
+            )
 
         try:
             appointment = await self._scheduling.book_appointment(
@@ -280,7 +342,11 @@ class ConversationService:
                 limit=5,
             )
             if not alternatives:
-                return "idle", "Sorry, that slot was taken and I have no fresh alternatives yet.", {"retry_count": 0}
+                return (
+                    "idle",
+                    "Sorry, that slot was taken and I have no fresh alternatives yet.",
+                    {"retry_count": 0},
+                )
             presented = self._serialize_presented_slots(alternatives, contact.timezone)
             prompt = (
                 "Sorry, that slot was just booked by someone else.\n"
@@ -303,15 +369,29 @@ class ConversationService:
         context: dict[str, Any],
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
-        intent = await self._detect_intent(contact=contact, message=message, history=history, context=context)
+        intent = await self._detect_intent(
+            contact=contact, message=message, history=history, context=context
+        )
         appointment_id = context.get("pending_appointment_id")
         if intent.intent != "CONFIRM":
-            return "idle", "OK, your appointment is still on the books.", {"retry_count": 0, "last_intent": "DENY"}
+            return (
+                "idle",
+                "OK, your appointment is still on the books.",
+                {"retry_count": 0, "last_intent": "DENY"},
+            )
         if not appointment_id:
-            return "idle", "I couldn't find the appointment to cancel.", {"retry_count": 0}
+            return (
+                "idle",
+                "I couldn't find the appointment to cancel.",
+                {"retry_count": 0},
+            )
 
         await self._scheduling.cancel_appointment(uuid.UUID(str(appointment_id)))
-        return "idle", "Done - your appointment is cancelled.", {"retry_count": 0, "last_intent": "CANCEL"}
+        return (
+            "idle",
+            "Done - your appointment is cancelled.",
+            {"retry_count": 0, "last_intent": "CANCEL"},
+        )
 
     async def _handle_reschedule_show_slots(
         self,
@@ -320,12 +400,18 @@ class ConversationService:
         context: dict[str, Any],
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
-        intent = await self._detect_intent(contact=contact, message=message, history=history, context=context)
+        intent = await self._detect_intent(
+            contact=contact, message=message, history=history, context=context
+        )
         if intent.intent == "CANCEL":
-            return await self._handle_idle(contact=contact, message=message, context=context, history=history)
+            return await self._handle_idle(
+                contact=contact, message=message, context=context, history=history
+            )
 
         presented = list(context.get("presented_slots", []))
-        selected_slot_id = await self._ai.parse_slot_selection(message=message, presented_slots=presented)
+        selected_slot_id = await self._ai.parse_slot_selection(
+            message=message, presented_slots=presented
+        )
         if selected_slot_id is None:
             retry_count = int(context.get("retry_count", 0)) + 1
             if retry_count >= MAX_RETRIES:
@@ -340,7 +426,9 @@ class ConversationService:
                 {**context, "retry_count": retry_count},
             )
 
-        selected_display = self._find_presented_slot_display(presented, selected_slot_id)
+        selected_display = self._find_presented_slot_display(
+            presented, selected_slot_id
+        )
         return (
             "confirming_reschedule",
             f"Perfect - should I move your appointment to {selected_display}? Reply YES or NO.",
@@ -359,16 +447,30 @@ class ConversationService:
         context: dict[str, Any],
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
-        intent = await self._detect_intent(contact=contact, message=message, history=history, context=context)
+        intent = await self._detect_intent(
+            contact=contact, message=message, history=history, context=context
+        )
         if intent.intent == "DENY":
-            return "idle", "No changes made. Your current appointment remains booked.", {"retry_count": 0}
+            return (
+                "idle",
+                "No changes made. Your current appointment remains booked.",
+                {"retry_count": 0},
+            )
         if intent.intent != "CONFIRM":
-            return "confirming_reschedule", "Please reply YES to confirm the reschedule or NO to keep it.", context
+            return (
+                "confirming_reschedule",
+                "Please reply YES to confirm the reschedule or NO to keep it.",
+                context,
+            )
 
         original_id = context.get("original_appointment_id")
         selected_slot_id = context.get("selected_slot_id")
         if not original_id or not selected_slot_id:
-            return "idle", "I couldn't finish the reschedule flow. Let's try again.", {"retry_count": 0}
+            return (
+                "idle",
+                "I couldn't finish the reschedule flow. Let's try again.",
+                {"retry_count": 0},
+            )
 
         try:
             replacement = await self._scheduling.reschedule_appointment(
@@ -388,7 +490,11 @@ class ConversationService:
                 limit=5,
             )
             if not alternatives:
-                return "idle", "That new slot was taken and I have no alternatives right now.", {"retry_count": 0}
+                return (
+                    "idle",
+                    "That new slot was taken and I have no alternatives right now.",
+                    {"retry_count": 0},
+                )
             presented = self._serialize_presented_slots(alternatives, contact.timezone)
             return (
                 "reschedule_show_slots",
@@ -410,7 +516,9 @@ class ConversationService:
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
         # Re-run classification once user provides more detail.
-        return await self._handle_idle(contact=contact, message=message, context=context, history=history)
+        return await self._handle_idle(
+            contact=contact, message=message, context=context, history=history
+        )
 
     async def _begin_booking(
         self,
@@ -426,14 +534,22 @@ class ConversationService:
             limit=5,
         )
         if not slots:
-            return "idle", "I don't see open times right now. Want me to check again later?", {"retry_count": 0}
+            return (
+                "idle",
+                "I don't see open times right now. Want me to check again later?",
+                {"retry_count": 0},
+            )
         presented = self._serialize_presented_slots(slots, contact.timezone)
         prompt = self._ai.generate_slot_presentation(presented, contact.timezone)
-        return "showing_slots", prompt, {
-            "presented_slots": presented,
-            "retry_count": 0,
-            "last_intent": intent.intent,
-        }
+        return (
+            "showing_slots",
+            prompt,
+            {
+                "presented_slots": presented,
+                "retry_count": 0,
+                "last_intent": intent.intent,
+            },
+        )
 
     async def _detect_intent(
         self,
@@ -498,7 +614,9 @@ class ConversationService:
 
     async def _get_or_create_contact(self, phone_number: str) -> Contact:
         async with AsyncSessionFactory() as session:
-            result = await session.execute(select(Contact).where(Contact.phone_number == phone_number))
+            result = await session.execute(
+                select(Contact).where(Contact.phone_number == phone_number)
+            )
             contact = result.scalar_one_or_none()
             if contact is not None:
                 return contact
@@ -518,12 +636,16 @@ class ConversationService:
     async def _get_or_create_state(self, contact_id: uuid.UUID) -> ConversationState:
         async with AsyncSessionFactory() as session:
             result = await session.execute(
-                select(ConversationState).where(ConversationState.contact_id == contact_id)
+                select(ConversationState).where(
+                    ConversationState.contact_id == contact_id
+                )
             )
             state = result.scalar_one_or_none()
             if state is not None:
                 return state
-            state = ConversationState(contact_id=contact_id, current_state="idle", context={})
+            state = ConversationState(
+                contact_id=contact_id, current_state="idle", context={}
+            )
             session.add(state)
             await session.commit()
             await session.refresh(state)
@@ -555,5 +677,7 @@ class ConversationService:
 
     async def _get_slot(self, slot_id: uuid.UUID) -> AvailabilitySlot | None:
         async with AsyncSessionFactory() as session:
-            result = await session.execute(select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id))
+            result = await session.execute(
+                select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
+            )
             return result.scalar_one_or_none()

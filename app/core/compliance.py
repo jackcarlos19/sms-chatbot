@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-OPT_OUT_KEYWORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}
+OPT_OUT_KEYWORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "END", "QUIT"}
+# NOTE: "CANCEL" intentionally excluded — it conflicts with appointment cancellation.
+# Twilio's Advanced Opt-Out handles CANCEL at the carrier level if needed.
 OPT_IN_KEYWORDS = {"START", "YES", "UNSTOP"}
 HELP_KEYWORDS = {"HELP", "INFO"}
 

@@ -42,6 +42,23 @@ async def expire_conversations(ctx: dict) -> int:  # noqa: ARG001
         return len(expired)
 
 
+async def _wait_for_rate_limit(redis, campaign_id: str, max_per_second: int) -> None:
+    """Sliding window rate limiter using Redis INCR + EXPIRE."""
+    if not all(hasattr(redis, attr) for attr in ("incr", "expire", "ttl")):
+        # Fallback for simple test doubles or partial Redis clients.
+        await asyncio.sleep(1)
+        return
+
+    key = f"sms_rate:{campaign_id}"
+    current = await redis.incr(key)
+    if current == 1:
+        await redis.expire(key, 1)  # 1-second window
+    if current > max_per_second:
+        ttl = await redis.ttl(key)
+        if ttl > 0:
+            await asyncio.sleep(ttl)
+
+
 async def process_campaign_batch(
     ctx: dict, campaign_id: str, offset: int, batch_size: int = 50
 ) -> int:
@@ -129,7 +146,15 @@ async def process_campaign_batch(
             except Exception:  # noqa: BLE001
                 recipient.status = "failed"
             await session.commit()
-            await asyncio.sleep(1)
+            if "redis" in ctx:
+                settings = get_settings()
+                await _wait_for_rate_limit(
+                    ctx["redis"],
+                    str(campaign.id),
+                    settings.twilio_max_sends_per_second,
+                )
+            else:
+                await asyncio.sleep(1)  # Fallback when Redis unavailable
 
     if "redis" in ctx and not delayed and len(recipients) == batch_size:
         await ctx["redis"].enqueue_job(

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
         default="", alias="TWILIO_STATUS_CALLBACK_URL"
     )
     twilio_max_retries: int = Field(default=3, alias="TWILIO_MAX_RETRIES")
+    twilio_max_sends_per_second: int = Field(
+        default=1, alias="TWILIO_MAX_SENDS_PER_SECOND"
+    )
 
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
     ai_model: str = Field(

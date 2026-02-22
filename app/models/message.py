@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -17,16 +20,16 @@ class Message(Base):
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
     )
-    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+    contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id")
     )
     direction: Mapped[str] = mapped_column(String(10), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    sms_sid: Mapped[str | None] = mapped_column(String(64), unique=True)
+    sms_sid: Mapped[Optional[str]] = mapped_column(String(64), unique=True)
     status: Mapped[str] = mapped_column(String(20), server_default=text("'queued'"))
-    error_code: Mapped[str | None] = mapped_column(String(10))
-    error_message: Mapped[str | None] = mapped_column(Text)
-    campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+    error_code: Mapped[Optional[str]] = mapped_column(String(10))
+    error_message: Mapped[Optional[str]] = mapped_column(Text)
+    campaign_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("campaigns.id")
     )
     created_at: Mapped[datetime] = mapped_column(

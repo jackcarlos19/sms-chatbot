@@ -2,11 +2,13 @@ from fastapi import FastAPI, HTTPException
 from redis.asyncio import from_url as redis_from_url
 from sqlalchemy import text
 
+from app.api.webhooks import router as webhooks_router
 from app.config import get_settings
 from app.database import AsyncSessionFactory
 
 settings = get_settings()
 app = FastAPI(title="SMS Chatbot API")
+app.include_router(webhooks_router)
 
 
 @app.get("/api/health")

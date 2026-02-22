@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -24,8 +27,8 @@ class CampaignRecipient(Base):
         UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(20), server_default=text("'pending'"))
-    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         UniqueConstraint("campaign_id", "contact_id", name="unique_campaign_contact"),

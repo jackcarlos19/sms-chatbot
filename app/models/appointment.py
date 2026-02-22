@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -27,12 +30,12 @@ class Appointment(Base):
     booked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    cancellation_reason: Mapped[str | None] = mapped_column(Text)
-    rescheduled_from_id: Mapped[uuid.UUID | None] = mapped_column(
+    cancelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    cancellation_reason: Mapped[Optional[str]] = mapped_column(Text)
+    rescheduled_from_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("appointments.id")
     )
-    notes: Mapped[str | None] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     version: Mapped[int] = mapped_column(Integer, server_default=text("1"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

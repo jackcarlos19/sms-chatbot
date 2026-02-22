@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8000, alias="APP_PORT")
     secret_key: str = Field(default="change-me-in-production", alias="SECRET_KEY")
     business_name: str = Field(default="Acme Services", alias="BUSINESS_NAME")
+    admin_api_key: str = Field(default="change-admin-key", alias="ADMIN_API_KEY")
     support_phone_number: str = Field(
         default="+10000000000",
         alias="SUPPORT_PHONE_NUMBER",
@@ -34,7 +35,9 @@ class Settings(BaseSettings):
     twilio_account_sid: str = Field(default="", alias="TWILIO_ACCOUNT_SID")
     twilio_auth_token: str = Field(default="", alias="TWILIO_AUTH_TOKEN")
     twilio_phone_number: str = Field(default="", alias="TWILIO_PHONE_NUMBER")
-    twilio_status_callback_url: str = Field(default="", alias="TWILIO_STATUS_CALLBACK_URL")
+    twilio_status_callback_url: str = Field(
+        default="", alias="TWILIO_STATUS_CALLBACK_URL"
+    )
     twilio_max_retries: int = Field(default=3, alias="TWILIO_MAX_RETRIES")
 
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
@@ -47,7 +50,9 @@ class Settings(BaseSettings):
     default_quiet_hours_start: str = Field(
         default="21:00", alias="DEFAULT_QUIET_HOURS_START"
     )
-    default_quiet_hours_end: str = Field(default="09:00", alias="DEFAULT_QUIET_HOURS_END")
+    default_quiet_hours_end: str = Field(
+        default="09:00", alias="DEFAULT_QUIET_HOURS_END"
+    )
 
     ngrok_authtoken: str = Field(default="", alias="NGROK_AUTHTOKEN")
 

@@ -26,13 +26,18 @@ async def inbound_sms(request: Request, background_tasks: BackgroundTasks) -> Re
     from_number = form.get("From", "")
     body = form.get("Body", "")
     sms_sid = form.get("MessageSid", "")
+    request.state.reply_phone = from_number
     signature = request.headers.get("X-Twilio-Signature", "")
 
     if not sms_service.validate_signature(str(request.url), form, signature):
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
     if await idempotency_service.is_duplicate(sms_sid):
-        logger.info("duplicate_inbound_skipped", from_number=mask_phone_number(from_number), sms_sid=sms_sid)
+        logger.info(
+            "duplicate_inbound_skipped",
+            from_number=mask_phone_number(from_number),
+            sms_sid=sms_sid,
+        )
         return Response(content="<Response></Response>", media_type="application/xml")
 
     await idempotency_service.mark_processed(sms_sid)

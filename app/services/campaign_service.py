@@ -134,12 +134,25 @@ class CampaignService:
             }
 
     def render_template(self, campaign: Campaign, contact: Contact) -> str:
+        """Render campaign message template with contact variables.
+
+        Uses string.Template.safe_substitute to:
+        1. Never crash on missing variables (leaves placeholder as-is)
+        2. Prevent attribute access injection ({first_name.__class__} stays literal)
+        """
+        from string import Template
+
         variables = {
-            "first_name": contact.first_name or "there",
+            "first_name": getattr(contact, "first_name", None) or "there",
+            "last_name": getattr(contact, "last_name", None) or "",
             "business_name": self._settings.business_name,
             "phone_number": self._settings.twilio_phone_number,
         }
-        return campaign.message_template.format(**variables)
+        # Convert {var} style to $var style for string.Template
+        template_text = campaign.message_template
+        for key in variables:
+            template_text = template_text.replace("{" + key + "}", "${" + key + "}")
+        return Template(template_text).safe_substitute(variables)
 
     async def _update_status(self, campaign_id: uuid.UUID, status: str) -> Campaign:
         async with self._session_factory() as session:

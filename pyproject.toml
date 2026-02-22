@@ -15,7 +15,7 @@ dependencies = [
   "asyncpg",
   "alembic",
   "twilio",
-  "anthropic",
+  "openai",
   "redis",
   "arq",
   "pydantic-settings",

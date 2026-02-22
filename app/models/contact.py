@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import DateTime, Index, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -19,16 +21,16 @@ class Contact(Base):
         server_default=text("gen_random_uuid()"),
     )
     phone_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    first_name: Mapped[str | None] = mapped_column(String(100))
-    last_name: Mapped[str | None] = mapped_column(String(100))
+    first_name: Mapped[Optional[str]] = mapped_column(String(100))
+    last_name: Mapped[Optional[str]] = mapped_column(String(100))
     timezone: Mapped[str] = mapped_column(
         String(50), server_default=text("'America/New_York'")
     )
     opt_in_status: Mapped[str] = mapped_column(
         String(20), server_default=text("'opted_in'")
     )
-    opt_in_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    opt_out_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    opt_in_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    opt_out_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
         JSONB,

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -17,7 +20,7 @@ class AvailabilitySlot(Base):
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
     )
-    provider_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
     start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     buffer_minutes: Mapped[int] = mapped_column(Integer, server_default=text("0"))

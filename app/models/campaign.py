@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, time
+from typing import Optional
 
 from sqlalchemy import DateTime, Integer, String, Text, Time, func, text
 from sqlalchemy.dialects.postgresql import UUID
@@ -20,7 +23,7 @@ class Campaign(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     message_template: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(20), server_default=text("'draft'"))
-    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    scheduled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     quiet_hours_start: Mapped[time] = mapped_column(
         Time, server_default=text("'21:00'::time")
     )

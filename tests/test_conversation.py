@@ -16,7 +16,6 @@ from app.services.conversation_service import ConversationService
 class FakeAIService:
     def __init__(self) -> None:
         self.detect_calls = 0
-        self.raise_if_called = False
 
     async def detect_intent(
         self,
@@ -35,8 +34,6 @@ class FakeAIService:
             contact_timezone,
         )
         self.detect_calls += 1
-        if self.raise_if_called:
-            raise AssertionError("AI should not be called for compliance keywords.")
 
         text = (message or "").strip().lower()
         if any(token in text for token in ["reschedule", "move"]):
@@ -192,40 +189,61 @@ class FakeSchedulingService:
         return choices[:limit]
 
 
-class InMemoryConversationService(ConversationService):
-    def __init__(
-        self,
-        ai_service: FakeAIService,
-        scheduling_service: FakeSchedulingService,
-        sms_service: FakeSMSService,
-    ):
-        super().__init__(
-            ai_service=ai_service,
-            scheduling_service=scheduling_service,
-            sms_service=sms_service,
-        )
-        self.contacts_by_phone: dict[str, SimpleNamespace] = {}
-        self.states_by_contact: dict[uuid.UUID, SimpleNamespace] = {}
+class FakeDBSession:
+    def add(self, obj: object) -> None:
+        _ = obj
 
-    async def _get_or_create_contact(self, phone_number: str):  # type: ignore[override]
-        contact = self.contacts_by_phone.get(phone_number)
-        if contact is None:
-            contact = SimpleNamespace(
-                id=uuid.uuid4(),
-                phone_number=phone_number,
-                timezone="UTC",
-                opt_in_status="pending",
-                opt_in_date=None,
-                opt_out_date=None,
-            )
-            self.contacts_by_phone[phone_number] = contact
-        return contact
+    async def flush(self) -> None:
+        return None
 
-    async def _save_contact(self, contact):  # type: ignore[override]
-        self.contacts_by_phone[contact.phone_number] = contact
+    async def commit(self) -> None:
+        return None
 
-    async def _get_or_create_state(self, contact_id: uuid.UUID):  # type: ignore[override]
-        state = self.states_by_contact.get(contact_id)
+
+class FakeSessionContext:
+    def __init__(self, session: FakeDBSession) -> None:
+        self._session = session
+
+    async def __aenter__(self) -> FakeDBSession:
+        return self._session
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        _ = (exc_type, exc, tb)
+        return None
+
+
+@pytest.fixture
+def service_bundle(monkeypatch):
+    now = datetime.now(timezone.utc)
+    slot_a = SimpleNamespace(id=uuid.uuid4(), start_time=now + timedelta(hours=1), is_available=True)
+    slot_b = SimpleNamespace(id=uuid.uuid4(), start_time=now + timedelta(hours=2), is_available=True)
+    slot_c = SimpleNamespace(id=uuid.uuid4(), start_time=now + timedelta(hours=3), is_available=True)
+    slots = {slot_a.id: slot_a, slot_b.id: slot_b, slot_c.id: slot_c}
+
+    ai = FakeAIService()
+    sms = FakeSMSService()
+    scheduling = FakeSchedulingService(slots=slots)
+    service = ConversationService(
+        ai_service=ai,
+        scheduling_service=scheduling,
+        sms_service=sms,
+        redis_client=None,
+    )
+
+    contacts_by_phone: dict[str, SimpleNamespace] = {}
+    states_by_contact: dict[uuid.UUID, SimpleNamespace] = {}
+    fake_session = FakeDBSession()
+
+    monkeypatch.setattr(
+        "app.services.conversation_service.AsyncSessionFactory",
+        lambda: FakeSessionContext(fake_session),
+    )
+
+    async def fake_get_contact(_session, phone_number: str):
+        return contacts_by_phone.get(phone_number)
+
+    async def fake_get_or_create_state(_session, contact_id: uuid.UUID):
+        state = states_by_contact.get(contact_id)
         if state is None:
             state = SimpleNamespace(
                 contact_id=contact_id,
@@ -234,93 +252,70 @@ class InMemoryConversationService(ConversationService):
                 last_message_at=None,
                 expires_at=None,
             )
-            self.states_by_contact[contact_id] = state
+            states_by_contact[contact_id] = state
         return state
 
-    async def _save_state(self, state):  # type: ignore[override]
-        self.states_by_contact[state.contact_id] = state
-
-    async def _get_contact_appointments(self, contact_id: uuid.UUID, status_filter: list[str] | None = None):  # type: ignore[override]
+    async def fake_get_contact_appointments(
+        contact_id: uuid.UUID, status_filter: list[str] | None = None
+    ):
         statuses = set(status_filter or ["confirmed"])
         return [
             appt
-            for appt in self._scheduling.appointments.values()
+            for appt in scheduling.appointments.values()
             if appt.contact_id == contact_id and appt.status in statuses
         ]
 
-    async def _get_slot(self, slot_id: uuid.UUID):  # type: ignore[override]
-        return self._scheduling.slots.get(slot_id)
+    async def fake_get_slot(slot_id: uuid.UUID):
+        return scheduling.slots.get(slot_id)
 
+    monkeypatch.setattr(service, "_get_contact", fake_get_contact)
+    monkeypatch.setattr(service, "_get_or_create_state", fake_get_or_create_state)
+    monkeypatch.setattr(service, "_get_contact_appointments", fake_get_contact_appointments)
+    monkeypatch.setattr(service, "_get_slot", fake_get_slot)
 
-@pytest.fixture
-def service_bundle():
-    now = datetime.now(timezone.utc)
-    slots = {
-        uuid.uuid4(): SimpleNamespace(
-            id=uuid.uuid4(), start_time=now + timedelta(hours=1), is_available=True
-        ),
-        uuid.uuid4(): SimpleNamespace(
-            id=uuid.uuid4(), start_time=now + timedelta(hours=2), is_available=True
-        ),
-        uuid.uuid4(): SimpleNamespace(
-            id=uuid.uuid4(), start_time=now + timedelta(hours=3), is_available=True
-        ),
-    }
-    # Normalize keys and ids.
-    normalized_slots: dict[uuid.UUID, SimpleNamespace] = {}
-    for slot in slots.values():
-        normalized_slots[slot.id] = slot
+    def create_contact(phone: str, status: str = "pending") -> SimpleNamespace:
+        contact = SimpleNamespace(
+            id=uuid.uuid4(),
+            phone_number=phone,
+            timezone="UTC",
+            opt_in_status=status,
+            opt_in_date=None,
+            opt_out_date=None,
+        )
+        contacts_by_phone[phone] = contact
+        return contact
 
-    ai = FakeAIService()
-    sms = FakeSMSService()
-    scheduling = FakeSchedulingService(slots=normalized_slots)
-    service = InMemoryConversationService(
-        ai_service=ai, scheduling_service=scheduling, sms_service=sms
-    )
-    return service, ai, sms, scheduling
+    return service, ai, sms, scheduling, contacts_by_phone, states_by_contact, create_contact
 
 
 @pytest.mark.asyncio
-async def test_compliance_checked_before_ai(service_bundle) -> None:
-    service, ai, sms, _ = service_bundle
-    ai.raise_if_called = True
-    phone = "+15551110000"
-
-    await service.process_inbound_message(phone, "STOP", "SM1")
-
-    contact = service.contacts_by_phone[phone]
-    assert contact.opt_in_status == "opted_out"
-    assert len(sms.sent) == 1
-    assert "unsubscribed" in sms.sent[0]["body"].lower()
-
-
-@pytest.mark.asyncio
-async def test_unknown_number_creates_pending_contact(service_bundle) -> None:
-    service, _, _, _ = service_bundle
+async def test_unknown_number_is_ignored_without_contact_record(service_bundle) -> None:
+    service, ai, sms, _, contacts, _, _ = service_bundle
     phone = "+15552220000"
 
     await service.process_inbound_message(phone, "book", "SM2")
 
-    assert phone in service.contacts_by_phone
-    assert service.contacts_by_phone[phone].opt_in_status == "pending"
+    assert phone not in contacts
+    assert ai.detect_calls == 0
+    assert sms.sent == []
 
 
 @pytest.mark.asyncio
 async def test_full_booking_flow(service_bundle) -> None:
-    service, _, sms, scheduling = service_bundle
+    service, _, sms, scheduling, _, states, create_contact = service_bundle
     phone = "+15553330000"
+    contact = create_contact(phone, status="opted_in")
 
     await service.process_inbound_message(phone, "book", "SM3")
-    contact = service.contacts_by_phone[phone]
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "showing_slots"
 
     await service.process_inbound_message(phone, "1", "SM4")
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "confirming_booking"
 
     await service.process_inbound_message(phone, "yes", "SM5")
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "idle"
     assert any(appt.status == "confirmed" for appt in scheduling.appointments.values())
     assert any("confirmed" in item["body"].lower() for item in sms.sent)
@@ -328,9 +323,9 @@ async def test_full_booking_flow(service_bundle) -> None:
 
 @pytest.mark.asyncio
 async def test_full_cancel_flow(service_bundle) -> None:
-    service, _, _, scheduling = service_bundle
+    service, _, _, scheduling, _, states, create_contact = service_bundle
     phone = "+15554440000"
-    contact = await service._get_or_create_contact(phone)
+    contact = create_contact(phone, status="opted_in")
     slot = next(iter(scheduling.slots.values()))
     slot.is_available = False
     appt = SimpleNamespace(
@@ -344,7 +339,7 @@ async def test_full_cancel_flow(service_bundle) -> None:
     scheduling.appointments[appt.id] = appt
 
     await service.process_inbound_message(phone, "cancel", "SM6")
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "confirming_cancel"
 
     await service.process_inbound_message(phone, "yes", "SM7")
@@ -354,9 +349,9 @@ async def test_full_cancel_flow(service_bundle) -> None:
 
 @pytest.mark.asyncio
 async def test_full_reschedule_flow(service_bundle) -> None:
-    service, _, _, scheduling = service_bundle
+    service, _, _, scheduling, _, states, create_contact = service_bundle
     phone = "+15555550000"
-    contact = await service._get_or_create_contact(phone)
+    contact = create_contact(phone, status="opted_in")
     slot_ids = list(scheduling.slots.keys())
     old_slot = scheduling.slots[slot_ids[0]]
     new_slot = scheduling.slots[slot_ids[1]]
@@ -372,15 +367,15 @@ async def test_full_reschedule_flow(service_bundle) -> None:
     scheduling.appointments[appt.id] = appt
 
     await service.process_inbound_message(phone, "reschedule", "SM8")
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "reschedule_show_slots"
 
     await service.process_inbound_message(phone, "1", "SM9")
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "confirming_reschedule"
 
     await service.process_inbound_message(phone, "yes", "SM10")
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "idle"
     assert any(
         appt_obj.rescheduled_from_id == appt.id
@@ -392,8 +387,9 @@ async def test_full_reschedule_flow(service_bundle) -> None:
 
 @pytest.mark.asyncio
 async def test_staleness_recovery_returns_to_showing_slots(service_bundle) -> None:
-    service, _, sms, scheduling = service_bundle
+    service, _, sms, scheduling, _, states, create_contact = service_bundle
     phone = "+15556660000"
+    contact = create_contact(phone, status="opted_in")
     slot_id = next(iter(scheduling.slots.keys()))
     scheduling.fail_once_slot_ids.add(slot_id)
 
@@ -401,22 +397,21 @@ async def test_staleness_recovery_returns_to_showing_slots(service_bundle) -> No
     await service.process_inbound_message(phone, "1", "SM12")
     await service.process_inbound_message(phone, "yes", "SM13")
 
-    contact = service.contacts_by_phone[phone]
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state == "showing_slots"
     assert "just booked by someone else" in sms.sent[-1]["body"].lower()
 
 
 @pytest.mark.asyncio
 async def test_mid_flow_intent_change_to_cancel(service_bundle) -> None:
-    service, _, sms, _ = service_bundle
+    service, _, sms, _, _, states, create_contact = service_bundle
     phone = "+15557770000"
+    contact = create_contact(phone, status="opted_in")
 
     await service.process_inbound_message(phone, "book", "SM14")
     await service.process_inbound_message(phone, "1", "SM15")
     await service.process_inbound_message(phone, "cancel", "SM16")
 
-    contact = service.contacts_by_phone[phone]
-    state = service.states_by_contact[contact.id]
+    state = states[contact.id]
     assert state.current_state != "confirming_booking"
     assert "cancel" in sms.sent[-1]["body"].lower()

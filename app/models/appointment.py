@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -42,6 +42,14 @@ class Appointment(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    contact = relationship("Contact", back_populates="appointments")
+    slot = relationship("AvailabilitySlot", back_populates="appointments")
+    rescheduled_from = relationship(
+        "Appointment",
+        remote_side="[Appointment.id]",
+        foreign_keys="[Appointment.rescheduled_from_id]",
     )
 
     __table_args__ = (

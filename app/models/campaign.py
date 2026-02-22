@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy import DateTime, Integer, String, Text, Time, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -42,3 +42,6 @@ class Campaign(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    messages = relationship("Message", back_populates="campaign")
+    recipients = relationship("CampaignRecipient", back_populates="campaign")

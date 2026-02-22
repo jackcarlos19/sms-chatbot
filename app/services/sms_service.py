@@ -120,7 +120,20 @@ class SMSService:
 
         raise RuntimeError("Failed to send message after retries")
 
-    async def handle_inbound(self, from_number: str, body: str, sms_sid: str) -> None:
+    async def handle_inbound(
+        self,
+        from_number: str,
+        body: str,
+        sms_sid: str,
+        conversation_service: Any = None,
+    ) -> None:
+        """Process an inbound SMS. Called as a BackgroundTask after webhook returns 200.
+
+        Flow:
+        1. Log inbound message to database
+        2. Check compliance keywords (STOP/START/HELP) — handle immediately
+        3. Route to conversation service for AI-powered processing
+        """
         logger.info(
             "inbound_sms_received",
             from_number=mask_phone_number(from_number),
@@ -155,9 +168,17 @@ class SMSService:
                 return
 
             await session.commit()
-            logger.info(
-                "inbound_non_compliance_deferred",
+
+        # Route non-compliance messages to the conversation engine
+        if conversation_service is not None:
+            await conversation_service.process_inbound_message(
+                phone_number=from_number, body=body, sms_sid=sms_sid
+            )
+        else:
+            logger.warning(
+                "no_conversation_service",
                 from_number=mask_phone_number(from_number),
+                sms_sid=sms_sid,
             )
 
     async def update_status(
@@ -189,7 +210,7 @@ class SMSService:
         if contact is not None:
             return contact
 
-        contact = Contact(phone_number=phone_number)
+        contact = Contact(phone_number=phone_number, opt_in_status="pending")
         session.add(contact)
         await session.flush()
         return contact

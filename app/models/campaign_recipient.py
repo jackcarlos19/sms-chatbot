@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -29,6 +29,9 @@ class CampaignRecipient(Base):
     status: Mapped[str] = mapped_column(String(20), server_default=text("'pending'"))
     sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    campaign = relationship("Campaign", back_populates="recipients")
+    contact = relationship("Contact")
 
     __table_args__ = (
         UniqueConstraint("campaign_id", "contact_id", name="unique_campaign_contact"),

@@ -7,6 +7,21 @@ services:
       - .env
     ports:
       - "8000:8000"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: arq app.workers.tasks.WorkerSettings
+    env_file:
+      - .env
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy

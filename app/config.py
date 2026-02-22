@@ -37,8 +37,11 @@ class Settings(BaseSettings):
     twilio_status_callback_url: str = Field(default="", alias="TWILIO_STATUS_CALLBACK_URL")
     twilio_max_retries: int = Field(default=3, alias="TWILIO_MAX_RETRIES")
 
-    anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
-    ai_model: str = Field(default="claude-sonnet-4-20250514", alias="AI_MODEL")
+    openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    ai_model: str = Field(
+        default="anthropic/claude-3-5-sonnet-20241022",
+        alias="AI_MODEL",
+    )
     ai_max_tokens: int = Field(default=300, alias="AI_MAX_TOKENS")
 
     default_quiet_hours_start: str = Field(

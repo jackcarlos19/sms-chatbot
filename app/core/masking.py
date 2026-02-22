@@ -1,9 +1,9 @@
+import re
+
+
 def mask_phone_number(phone_number: str) -> str:
-    if not phone_number:
-        return ""
+    """Masks a phone number for logs: +1234567890 -> +1234***7890."""
+    if not phone_number or len(phone_number) < 8:
+        return phone_number
 
-    digits = phone_number.strip()
-    if len(digits) <= 8:
-        return "***"
-
-    return f"{digits[:5]}***{digits[-4:]}"
+    return re.sub(r"(\+\d{1,3}\d{3})\d+(\d{4})$", r"\1***\2", phone_number.strip())

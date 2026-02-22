@@ -193,7 +193,10 @@ async def test_book_appointment_uses_for_update_and_marks_slot(store: Store) -> 
 
     assert appointment.slot_id == slot_id
     assert store.slots[slot_id].is_available is False
-    assert any(getattr(query, "_for_update_arg", None) is not None for query in store.for_update_queries)
+    assert any(
+        getattr(query, "_for_update_arg", None) is not None
+        for query in store.for_update_queries
+    )
 
 
 @pytest.mark.asyncio
@@ -203,7 +206,9 @@ async def test_cancel_appointment_reopens_slot(store: Store) -> None:
     slot_id = next(iter(store.slots.keys()))
 
     appointment = await service.book_appointment(contact_id=contact_id, slot_id=slot_id)
-    cancelled = await service.cancel_appointment(appointment.id, reason="Need to reschedule")
+    cancelled = await service.cancel_appointment(
+        appointment.id, reason="Need to reschedule"
+    )
 
     assert cancelled.status == "cancelled"
     assert store.slots[slot_id].is_available is True
@@ -218,7 +223,9 @@ async def test_reschedule_is_atomic_and_sets_link(store: Store) -> None:
     new_slot = slot_ids[1]
 
     original = await service.book_appointment(contact_id=contact_id, slot_id=old_slot)
-    replacement = await service.reschedule_appointment(appointment_id=original.id, new_slot_id=new_slot)
+    replacement = await service.reschedule_appointment(
+        appointment_id=original.id, new_slot_id=new_slot
+    )
 
     assert store.slots[old_slot].is_available is True
     assert store.slots[new_slot].is_available is False

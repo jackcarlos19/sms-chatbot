@@ -61,16 +61,29 @@ class FakeSession:
                 return FakeResult([self.campaign])
             return FakeResult([])
         if model.__name__ == "CampaignRecipient":
-            all_rows = [r for r in self.recipients if r.campaign_id == values.get("campaign_id:eq")]
-            offset = int(getattr(getattr(query, "_offset_clause", None), "value", 0) or 0)
-            limit = int(getattr(getattr(query, "_limit_clause", None), "value", len(all_rows)) or len(all_rows))
+            all_rows = [
+                r
+                for r in self.recipients
+                if r.campaign_id == values.get("campaign_id:eq")
+            ]
+            offset = int(
+                getattr(getattr(query, "_offset_clause", None), "value", 0) or 0
+            )
+            limit = int(
+                getattr(getattr(query, "_limit_clause", None), "value", len(all_rows))
+                or len(all_rows)
+            )
             return FakeResult(all_rows[offset : offset + limit])
         if model.__name__ == "Contact":
             match = [c for c in self.contacts if c.id == values.get("id:eq")]
             return FakeResult(match)
         if model.__name__ == "Message":
             cutoff = values.get("created_at:lt")
-            rows = [m for m in self.messages if m.status == "queued" and m.created_at < cutoff]
+            rows = [
+                m
+                for m in self.messages
+                if m.status == "queued" and m.created_at < cutoff
+            ]
             return FakeResult(rows)
         raise AssertionError("Unsupported query in fake session")
 
@@ -112,18 +125,25 @@ class FakeSMSService:
 
 def test_quiet_hours_midnight_wraparound_math() -> None:
     # 02:00 local should be inside 21:00 -> 09:00 quiet window.
-    now = datetime(2026, 2, 22, 7, 0, tzinfo=timezone.utc)  # 02:00 America/New_York (EST)
+    now = datetime(
+        2026, 2, 22, 7, 0, tzinfo=timezone.utc
+    )  # 02:00 America/New_York (EST)
     assert is_in_quiet_hours(now, "America/New_York", time(21, 0), time(9, 0)) is True
 
     # 14:00 local should be outside quiet window.
     day = datetime(2026, 2, 22, 19, 0, tzinfo=timezone.utc)  # 14:00 EST
     assert is_in_quiet_hours(day, "America/New_York", time(21, 0), time(9, 0)) is False
-    assert seconds_until_quiet_hours_end(now, "America/New_York", time(21, 0), time(9, 0)) > 0
+    assert (
+        seconds_until_quiet_hours_end(now, "America/New_York", time(21, 0), time(9, 0))
+        > 0
+    )
 
 
 def test_template_rendering_with_first_name_fallback() -> None:
     service = CampaignService()
-    campaign = SimpleNamespace(message_template="Hi {first_name} from {business_name}. Call {phone_number}.")
+    campaign = SimpleNamespace(
+        message_template="Hi {first_name} from {business_name}. Call {phone_number}."
+    )
 
     with_name = SimpleNamespace(first_name="Jamie")
     without_name = SimpleNamespace(first_name=None)
@@ -133,7 +153,9 @@ def test_template_rendering_with_first_name_fallback() -> None:
 
 
 @pytest.mark.asyncio
-async def test_process_campaign_batch_rate_limit_and_opt_in_recheck(monkeypatch) -> None:
+async def test_process_campaign_batch_rate_limit_and_opt_in_recheck(
+    monkeypatch,
+) -> None:
     campaign_id = uuid.uuid4()
     contact_ok = SimpleNamespace(
         id=uuid.uuid4(),
@@ -158,12 +180,26 @@ async def test_process_campaign_batch_rate_limit_and_opt_in_recheck(monkeypatch)
         quiet_hours_end=time(9, 0),
     )
     recipients = [
-        SimpleNamespace(id=uuid.uuid4(), campaign_id=campaign_id, contact_id=contact_ok.id, status="pending", sent_at=None),
-        SimpleNamespace(id=uuid.uuid4(), campaign_id=campaign_id, contact_id=contact_out.id, status="pending", sent_at=None),
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            campaign_id=campaign_id,
+            contact_id=contact_ok.id,
+            status="pending",
+            sent_at=None,
+        ),
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            campaign_id=campaign_id,
+            contact_id=contact_out.id,
+            status="pending",
+            sent_at=None,
+        ),
     ]
     contacts = [contact_ok, contact_out]
     messages: list[Any] = []
-    session = FakeSession(campaign=campaign, recipients=recipients, contacts=contacts, messages=messages)
+    session = FakeSession(
+        campaign=campaign, recipients=recipients, contacts=contacts, messages=messages
+    )
     redis = FakeRedis()
     sms = FakeSMSService()
 
@@ -176,7 +212,9 @@ async def test_process_campaign_batch_rate_limit_and_opt_in_recheck(monkeypatch)
     monkeypatch.setattr(tasks, "SMSService", lambda: sms)
     monkeypatch.setattr(tasks.asyncio, "sleep", fake_sleep)
 
-    processed = await tasks.process_campaign_batch({"redis": redis}, str(campaign_id), 0, 50)
+    processed = await tasks.process_campaign_batch(
+        {"redis": redis}, str(campaign_id), 0, 50
+    )
 
     assert processed == 1
     assert recipients[0].status == "sent"

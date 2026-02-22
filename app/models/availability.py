@@ -21,10 +21,14 @@ class AvailabilitySlot(Base):
         server_default=text("gen_random_uuid()"),
     )
     provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
-    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    start_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     buffer_minutes: Mapped[int] = mapped_column(Integer, server_default=text("0"))
-    slot_type: Mapped[str] = mapped_column(String(50), server_default=text("'standard'"))
+    slot_type: Mapped[str] = mapped_column(
+        String(50), server_default=text("'standard'")
+    )
     is_available: Mapped[bool] = mapped_column(Boolean, server_default=text("TRUE"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

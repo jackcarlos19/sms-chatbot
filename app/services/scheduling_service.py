@@ -16,7 +16,9 @@ from app.core.exceptions import SlotUnavailableError
 
 
 class SchedulingService:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession] | None = None) -> None:
+    def __init__(
+        self, session_factory: async_sessionmaker[AsyncSession] | None = None
+    ) -> None:
         self._session_factory = session_factory or AsyncSessionFactory
         # App-level lock provides deterministic safety in single-process test runs.
         self._slot_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -49,11 +51,14 @@ class SchedulingService:
                 slot
                 for slot in candidates
                 if slot.is_available
-                and (slot.end_time + timedelta(minutes=int(slot.buffer_minutes or 0))) <= date_to
+                and (slot.end_time + timedelta(minutes=int(slot.buffer_minutes or 0)))
+                <= date_to
             ]
             return filtered[:limit]
 
-    async def book_appointment(self, contact_id: uuid.UUID, slot_id: uuid.UUID) -> Appointment:
+    async def book_appointment(
+        self, contact_id: uuid.UUID, slot_id: uuid.UUID
+    ) -> Appointment:
         lock_key = str(slot_id)
         async with self._slot_locks[lock_key]:
             async with self._session_factory() as session:
@@ -66,7 +71,9 @@ class SchedulingService:
                     slot_result = await session.execute(slot_query)
                     slot = slot_result.scalar_one_or_none()
                     if slot is None or not slot.is_available:
-                        raise SlotUnavailableError("The selected slot is no longer available.")
+                        raise SlotUnavailableError(
+                            "The selected slot is no longer available."
+                        )
 
                     slot.is_available = False
 
@@ -88,7 +95,9 @@ class SchedulingService:
         async with self._session_factory() as session:
             async with session.begin():
                 appointment_query: Select[tuple[Appointment]] = (
-                    select(Appointment).where(Appointment.id == appointment_id).with_for_update()
+                    select(Appointment)
+                    .where(Appointment.id == appointment_id)
+                    .with_for_update()
                 )
                 appointment_result = await session.execute(appointment_query)
                 appointment = appointment_result.scalar_one_or_none()
@@ -96,7 +105,9 @@ class SchedulingService:
                     raise ValueError("Appointment not found.")
 
                 slot_query: Select[tuple[AvailabilitySlot]] = (
-                    select(AvailabilitySlot).where(AvailabilitySlot.id == appointment.slot_id).with_for_update()
+                    select(AvailabilitySlot)
+                    .where(AvailabilitySlot.id == appointment.slot_id)
+                    .with_for_update()
                 )
                 slot_result = await session.execute(slot_query)
                 slot = slot_result.scalar_one_or_none()
@@ -122,7 +133,9 @@ class SchedulingService:
                 async with self._session_factory() as session:
                     async with session.begin():
                         appointment_query: Select[tuple[Appointment]] = (
-                            select(Appointment).where(Appointment.id == appointment_id).with_for_update()
+                            select(Appointment)
+                            .where(Appointment.id == appointment_id)
+                            .with_for_update()
                         )
                         appointment_result = await session.execute(appointment_query)
                         old_appointment = appointment_result.scalar_one_or_none()
@@ -140,12 +153,16 @@ class SchedulingService:
                             raise ValueError("Existing slot not found.")
 
                         new_slot_query: Select[tuple[AvailabilitySlot]] = (
-                            select(AvailabilitySlot).where(AvailabilitySlot.id == new_slot_id).with_for_update()
+                            select(AvailabilitySlot)
+                            .where(AvailabilitySlot.id == new_slot_id)
+                            .with_for_update()
                         )
                         new_slot_result = await session.execute(new_slot_query)
                         new_slot = new_slot_result.scalar_one_or_none()
                         if new_slot is None or not new_slot.is_available:
-                            raise SlotUnavailableError("Requested reschedule slot is unavailable.")
+                            raise SlotUnavailableError(
+                                "Requested reschedule slot is unavailable."
+                            )
 
                         old_slot.is_available = True
                         new_slot.is_available = False

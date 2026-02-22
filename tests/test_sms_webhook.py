@@ -12,7 +12,9 @@ class FakeSMSService:
         self.inbound_calls: list[tuple[str, str, str]] = []
         self.status_calls: list[tuple[str, str, str | None, str | None]] = []
 
-    def validate_signature(self, url: str, params: dict[str, str], signature: str) -> bool:
+    def validate_signature(
+        self, url: str, params: dict[str, str], signature: str
+    ) -> bool:
         self.signature_calls += 1
         return self.valid_signature
 

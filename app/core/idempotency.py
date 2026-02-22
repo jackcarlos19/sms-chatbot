@@ -6,9 +6,13 @@ from app.config import get_settings
 
 
 class IdempotencyService:
-    def __init__(self, redis_client: Redis | None = None, ttl_seconds: int = 3600) -> None:
+    def __init__(
+        self, redis_client: Redis | None = None, ttl_seconds: int = 3600
+    ) -> None:
         settings = get_settings()
-        self._redis = redis_client or redis_from_url(settings.redis_url, decode_responses=True)
+        self._redis = redis_client or redis_from_url(
+            settings.redis_url, decode_responses=True
+        )
         self._ttl_seconds = ttl_seconds
 
     @staticmethod

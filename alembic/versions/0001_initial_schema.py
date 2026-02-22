@@ -31,18 +31,58 @@ def upgrade() -> None:
         ),
         sa.Column("name", sa.String(length=200), nullable=False),
         sa.Column("message_template", sa.Text(), nullable=False),
-        sa.Column("status", sa.String(length=20), server_default=sa.text("'draft'"), nullable=True),
+        sa.Column(
+            "status",
+            sa.String(length=20),
+            server_default=sa.text("'draft'"),
+            nullable=True,
+        ),
         sa.Column("scheduled_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("quiet_hours_start", sa.Time(), server_default=sa.text("'21:00'::time"), nullable=True),
-        sa.Column("quiet_hours_end", sa.Time(), server_default=sa.text("'09:00'::time"), nullable=True),
-        sa.Column("respect_timezone", sa.Boolean(), server_default=sa.text("TRUE"), nullable=True),
-        sa.Column("total_recipients", sa.Integer(), server_default=sa.text("0"), nullable=True),
-        sa.Column("sent_count", sa.Integer(), server_default=sa.text("0"), nullable=True),
-        sa.Column("delivered_count", sa.Integer(), server_default=sa.text("0"), nullable=True),
-        sa.Column("failed_count", sa.Integer(), server_default=sa.text("0"), nullable=True),
-        sa.Column("reply_count", sa.Integer(), server_default=sa.text("0"), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
+        sa.Column(
+            "quiet_hours_start",
+            sa.Time(),
+            server_default=sa.text("'21:00'::time"),
+            nullable=True,
+        ),
+        sa.Column(
+            "quiet_hours_end",
+            sa.Time(),
+            server_default=sa.text("'09:00'::time"),
+            nullable=True,
+        ),
+        sa.Column(
+            "respect_timezone",
+            sa.Boolean(),
+            server_default=sa.text("TRUE"),
+            nullable=True,
+        ),
+        sa.Column(
+            "total_recipients", sa.Integer(), server_default=sa.text("0"), nullable=True
+        ),
+        sa.Column(
+            "sent_count", sa.Integer(), server_default=sa.text("0"), nullable=True
+        ),
+        sa.Column(
+            "delivered_count", sa.Integer(), server_default=sa.text("0"), nullable=True
+        ),
+        sa.Column(
+            "failed_count", sa.Integer(), server_default=sa.text("0"), nullable=True
+        ),
+        sa.Column(
+            "reply_count", sa.Integer(), server_default=sa.text("0"), nullable=True
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 
@@ -58,14 +98,36 @@ def upgrade() -> None:
         sa.Column("first_name", sa.String(length=100), nullable=True),
         sa.Column("last_name", sa.String(length=100), nullable=True),
         sa.Column(
-            "timezone", sa.String(length=50), server_default=sa.text("'America/New_York'"), nullable=True
+            "timezone",
+            sa.String(length=50),
+            server_default=sa.text("'America/New_York'"),
+            nullable=True,
         ),
-        sa.Column("opt_in_status", sa.String(length=20), server_default=sa.text("'opted_in'"), nullable=True),
+        sa.Column(
+            "opt_in_status",
+            sa.String(length=20),
+            server_default=sa.text("'opted_in'"),
+            nullable=True,
+        ),
         sa.Column("opt_in_date", sa.DateTime(timezone=True), nullable=True),
         sa.Column("opt_out_date", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), server_default=sa.text("'{}'::jsonb")),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
+        sa.Column(
+            "metadata",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("phone_number"),
     )
@@ -84,12 +146,27 @@ def upgrade() -> None:
         sa.Column("direction", sa.String(length=10), nullable=False),
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column("sms_sid", sa.String(length=64), nullable=True),
-        sa.Column("status", sa.String(length=20), server_default=sa.text("'queued'"), nullable=True),
+        sa.Column(
+            "status",
+            sa.String(length=20),
+            server_default=sa.text("'queued'"),
+            nullable=True,
+        ),
         sa.Column("error_code", sa.String(length=10), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("campaign_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
         sa.ForeignKeyConstraint(["campaign_id"], ["campaigns.id"]),
         sa.ForeignKeyConstraint(["contact_id"], ["contacts.id"]),
         sa.PrimaryKeyConstraint("id"),
@@ -97,7 +174,10 @@ def upgrade() -> None:
     )
     op.create_index("idx_messages_campaign", "messages", ["campaign_id"], unique=False)
     op.create_index(
-        "idx_messages_contact", "messages", ["contact_id", sa.text("created_at DESC")], unique=False
+        "idx_messages_contact",
+        "messages",
+        ["contact_id", sa.text("created_at DESC")],
+        unique=False,
     )
     op.create_index("idx_messages_sms_sid", "messages", ["sms_sid"], unique=False)
 
@@ -112,10 +192,24 @@ def upgrade() -> None:
         sa.Column("provider_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("start_time", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_time", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("buffer_minutes", sa.Integer(), server_default=sa.text("0"), nullable=True),
-        sa.Column("slot_type", sa.String(length=50), server_default=sa.text("'standard'"), nullable=True),
-        sa.Column("is_available", sa.Boolean(), server_default=sa.text("TRUE"), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
+        sa.Column(
+            "buffer_minutes", sa.Integer(), server_default=sa.text("0"), nullable=True
+        ),
+        sa.Column(
+            "slot_type",
+            sa.String(length=50),
+            server_default=sa.text("'standard'"),
+            nullable=True,
+        ),
+        sa.Column(
+            "is_available", sa.Boolean(), server_default=sa.text("TRUE"), nullable=True
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -143,15 +237,35 @@ def upgrade() -> None:
         ),
         sa.Column("contact_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("slot_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("status", sa.String(length=20), server_default=sa.text("'confirmed'"), nullable=True),
-        sa.Column("booked_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
+        sa.Column(
+            "status",
+            sa.String(length=20),
+            server_default=sa.text("'confirmed'"),
+            nullable=True,
+        ),
+        sa.Column(
+            "booked_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
         sa.Column("cancelled_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("cancellation_reason", sa.Text(), nullable=True),
         sa.Column("rescheduled_from_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("version", sa.Integer(), server_default=sa.text("1"), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
         sa.ForeignKeyConstraint(["contact_id"], ["contacts.id"]),
         sa.ForeignKeyConstraint(["rescheduled_from_id"], ["appointments.id"]),
         sa.ForeignKeyConstraint(["slot_id"], ["availability_slots.id"]),
@@ -165,7 +279,10 @@ def upgrade() -> None:
         postgresql_where=sa.text("status IN ('confirmed', 'rescheduled')"),
     )
     op.create_index(
-        "idx_appointments_contact", "appointments", ["contact_id", "status"], unique=False
+        "idx_appointments_contact",
+        "appointments",
+        ["contact_id", "status"],
+        unique=False,
     )
 
     op.create_table(
@@ -178,13 +295,20 @@ def upgrade() -> None:
         ),
         sa.Column("campaign_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("contact_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("status", sa.String(length=20), server_default=sa.text("'pending'"), nullable=True),
+        sa.Column(
+            "status",
+            sa.String(length=20),
+            server_default=sa.text("'pending'"),
+            nullable=True,
+        ),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(["campaign_id"], ["campaigns.id"]),
         sa.ForeignKeyConstraint(["contact_id"], ["contacts.id"]),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("campaign_id", "contact_id", name="unique_campaign_contact"),
+        sa.UniqueConstraint(
+            "campaign_id", "contact_id", name="unique_campaign_contact"
+        ),
     )
 
     op.create_table(
@@ -196,12 +320,31 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("contact_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("current_state", sa.String(length=50), server_default=sa.text("'idle'"), nullable=True),
-        sa.Column("context", postgresql.JSONB(astext_type=sa.Text()), server_default=sa.text("'{}'::jsonb")),
+        sa.Column(
+            "current_state",
+            sa.String(length=50),
+            server_default=sa.text("'idle'"),
+            nullable=True,
+        ),
+        sa.Column(
+            "context",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+        ),
         sa.Column("last_message_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            nullable=True,
+        ),
         sa.ForeignKeyConstraint(["contact_id"], ["contacts.id"]),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("contact_id"),

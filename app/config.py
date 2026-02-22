@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8000, alias="APP_PORT")
     secret_key: str = Field(default="change-me-in-production", alias="SECRET_KEY")
     business_name: str = Field(default="Acme Services", alias="BUSINESS_NAME")
+    support_phone_number: str = Field(
+        default="+10000000000",
+        alias="SUPPORT_PHONE_NUMBER",
+    )
 
     database_url: str = Field(
         default="postgresql+asyncpg://postgres:postgres@db:5432/sms_chatbot",

@@ -14,6 +14,13 @@ from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.message import Message
+from app.schemas import (
+    AppointmentResponse,
+    CampaignCreateResponse,
+    CampaignResponse,
+    ContactResponse,
+    MessageResponse,
+)
 from app.services.campaign_service import CampaignService
 
 router = APIRouter(prefix="/api", tags=["admin"])
@@ -36,7 +43,11 @@ class CampaignPatchRequest(BaseModel):
     scheduled_at: Optional[datetime] = None
 
 
-@router.get("/contacts", dependencies=[Depends(verify_admin_api_key)])
+@router.get(
+    "/contacts",
+    response_model=list[ContactResponse],
+    dependencies=[Depends(verify_admin_api_key)],
+)
 async def list_contacts(limit: int = 100, offset: int = 0) -> list[dict]:
     async with AsyncSessionFactory() as session:
         result = await session.execute(
@@ -60,7 +71,11 @@ async def list_contacts(limit: int = 100, offset: int = 0) -> list[dict]:
         ]
 
 
-@router.get("/campaigns", dependencies=[Depends(verify_admin_api_key)])
+@router.get(
+    "/campaigns",
+    response_model=list[CampaignResponse],
+    dependencies=[Depends(verify_admin_api_key)],
+)
 async def list_campaigns(limit: int = 100, offset: int = 0) -> list[dict]:
     async with AsyncSessionFactory() as session:
         result = await session.execute(
@@ -89,7 +104,11 @@ async def list_campaigns(limit: int = 100, offset: int = 0) -> list[dict]:
         ]
 
 
-@router.post("/campaigns", dependencies=[Depends(verify_admin_api_key)])
+@router.post(
+    "/campaigns",
+    response_model=CampaignCreateResponse,
+    dependencies=[Depends(verify_admin_api_key)],
+)
 async def create_campaign(payload: CampaignCreateRequest) -> dict:
     from app.api.deps import get_campaign_service
 
@@ -107,7 +126,11 @@ async def create_campaign(payload: CampaignCreateRequest) -> dict:
     }
 
 
-@router.patch("/campaigns/{campaign_id}", dependencies=[Depends(verify_admin_api_key)])
+@router.patch(
+    "/campaigns/{campaign_id}",
+    response_model=CampaignResponse,
+    dependencies=[Depends(verify_admin_api_key)],
+)
 async def update_campaign(campaign_id: str, payload: CampaignPatchRequest) -> dict:
     cid = uuid.UUID(campaign_id)
     async with AsyncSessionFactory() as session:
@@ -128,10 +151,20 @@ async def update_campaign(campaign_id: str, payload: CampaignPatchRequest) -> di
                 "scheduled_at": (
                     campaign.scheduled_at.isoformat() if campaign.scheduled_at else None
                 ),
+                "total_recipients": campaign.total_recipients,
+                "sent_count": campaign.sent_count,
+                "delivered_count": campaign.delivered_count,
+                "failed_count": campaign.failed_count,
+                "reply_count": campaign.reply_count,
+                "created_at": campaign.created_at.isoformat(),
             }
 
 
-@router.get("/appointments", dependencies=[Depends(verify_admin_api_key)])
+@router.get(
+    "/appointments",
+    response_model=list[AppointmentResponse],
+    dependencies=[Depends(verify_admin_api_key)],
+)
 async def list_appointments(contact_id: str) -> list[dict]:
     cid = uuid.UUID(contact_id)
     async with AsyncSessionFactory() as session:
@@ -159,7 +192,11 @@ async def list_appointments(contact_id: str) -> list[dict]:
         ]
 
 
-@router.get("/messages", dependencies=[Depends(verify_admin_api_key)])
+@router.get(
+    "/messages",
+    response_model=list[MessageResponse],
+    dependencies=[Depends(verify_admin_api_key)],
+)
 async def list_messages(contact_id: str) -> list[dict]:
     cid = uuid.UUID(contact_id)
     async with AsyncSessionFactory() as session:

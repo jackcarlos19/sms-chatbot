@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.core.exceptions import SMSChatbotError
 from app.core.logging import configure_structured_logging
 from app.database import AsyncSessionFactory
+from app.schemas import HealthResponse
 
 settings = get_settings()
 configure_structured_logging()
@@ -48,8 +49,8 @@ async def handle_chatbot_error(request: Request, exc: SMSChatbotError):
     )
 
 
-@app.get("/api/health")
-async def health_check() -> dict[str, str]:
+@app.get("/api/health", response_model=HealthResponse)
+async def health_check() -> HealthResponse:
     db_status = "error"
     redis_status = "error"
 
@@ -72,4 +73,4 @@ async def health_check() -> dict[str, str]:
             },
         ) from exc
 
-    return {"status": "green", "db": db_status, "redis": redis_status}
+    return HealthResponse(status="green", db=db_status, redis=redis_status)

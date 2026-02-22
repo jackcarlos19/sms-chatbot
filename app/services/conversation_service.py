@@ -5,11 +5,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
+import structlog
+from redis.asyncio import Redis
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.compliance import handle_compliance, is_compliance_keyword
 from app.core.exceptions import SlotUnavailableError
+from app.core.masking import mask_phone_number
 from app.database import AsyncSessionFactory
 from app.models.appointment import Appointment
 from app.models.availability import AvailabilitySlot
@@ -19,17 +22,10 @@ from app.services.ai_service import AIService, IntentResult
 from app.services.scheduling_service import SchedulingService
 from app.services.sms_service import SMSService
 
+logger = structlog.get_logger(__name__)
+
 MAX_RETRIES = 3
-STRICT_COMPLIANCE_KEYWORDS = {
-    "STOP",
-    "STOPALL",
-    "UNSUBSCRIBE",
-    "END",
-    "QUIT",
-    "START",
-    "HELP",
-    "INFO",
-}
+CONTACT_LOCK_TTL = 30  # seconds — max time to hold per-contact lock
 
 
 class ConversationService:
@@ -38,70 +34,120 @@ class ConversationService:
         ai_service: Optional[AIService] = None,
         scheduling_service: Optional[SchedulingService] = None,
         sms_service: Optional[SMSService] = None,
+        redis_client: Optional[Redis] = None,
     ) -> None:
         self._settings = get_settings()
         self._ai = ai_service or AIService()
         self._scheduling = scheduling_service or SchedulingService()
         self._sms = sms_service or SMSService()
+        self._redis = redis_client
 
     async def process_inbound_message(
         self, phone_number: str, body: str, sms_sid: str
     ) -> None:
-        contact = await self._get_or_create_contact(phone_number)
+        """Main entry point. Called by sms_service AFTER compliance check passes.
+
+        Compliance keywords (STOP/START/HELP) are already handled before this
+        method is called. This method only handles conversational messages.
+        """
+        # Per-contact lock prevents race conditions from rapid sequential messages.
+        # If Redis is unavailable, proceed without lock (best-effort).
+        lock_key = f"conversation_lock:{phone_number}"
+        lock_acquired = False
+        if self._redis:
+            try:
+                lock_acquired = await self._redis.set(
+                    lock_key, "1", nx=True, ex=CONTACT_LOCK_TTL
+                )
+                if not lock_acquired:
+                    logger.warning(
+                        "conversation_locked",
+                        phone=mask_phone_number(phone_number),
+                        sms_sid=sms_sid,
+                    )
+                    return  # Another message is being processed; skip to avoid corruption
+            except Exception:  # noqa: BLE001
+                logger.warning("redis_lock_failed", phone=mask_phone_number(phone_number))
+
+        try:
+            await self._process_message_locked(phone_number, body, sms_sid)
+        finally:
+            if self._redis and lock_acquired:
+                try:
+                    await self._redis.delete(lock_key)
+                except Exception:  # noqa: BLE001
+                    pass  # Lock will expire via TTL
+
+    async def _process_message_locked(
+        self, phone_number: str, body: str, sms_sid: str
+    ) -> None:
+        """Process a message with the per-contact lock held.
+
+        Uses a SINGLE database session for the entire operation:
+        read contact → read state → dispatch handler → write state.
+        """
         normalized_body = (body or "").strip()
-        normalized_upper = normalized_body.upper()
 
-        # Compliance check is intentionally FIRST and short-circuits AI/state routing.
-        is_keyword, keyword_type = is_compliance_keyword(normalized_body)
-        if (
-            is_keyword
-            and keyword_type
-            and normalized_upper in STRICT_COMPLIANCE_KEYWORDS
-        ):
-            response = handle_compliance(
+        async with AsyncSessionFactory() as session:
+            # Load contact
+            contact = await self._get_contact(session, phone_number)
+            if contact is None:
+                logger.warning(
+                    "contact_not_found_in_conversation",
+                    phone=mask_phone_number(phone_number),
+                )
+                return
+
+            # Guard: don't process messages from opted-out contacts
+            if contact.opt_in_status == "opted_out":
+                logger.info(
+                    "opted_out_contact_skipped",
+                    phone=mask_phone_number(phone_number),
+                )
+                return
+
+            # Load or create conversation state within the same session
+            state = await self._get_or_create_state(session, contact.id)
+            context = dict(state.context or {})
+            history = list(context.get("history", []))
+
+            # Dispatch to the appropriate state handler
+            next_state, response_text, next_context = await self._dispatch_state_handler(
+                current_state=state.current_state or "idle",
                 contact=contact,
-                keyword_type=keyword_type,
-                business_name=self._settings.business_name,
-                support_number=self._settings.support_phone_number,
+                message=normalized_body,
+                context=context,
+                history=history,
             )
-            await self._save_contact(contact)
-            await self._sms.send_message(
-                to=contact.phone_number,
-                body=response,
-                force_send=True,
+
+            # Update conversation state within the same session
+            updated_history = self._append_history(
+                history=history,
+                user_message=normalized_body,
+                assistant_message=response_text,
             )
-            return
+            next_context["history"] = updated_history
+            state.current_state = next_state
+            state.context = next_context
+            state.last_message_at = datetime.now(timezone.utc)
+            state.expires_at = (
+                datetime.now(timezone.utc) + timedelta(hours=2)
+                if next_state != "idle"
+                else None
+            )
 
-        state = await self._get_or_create_state(contact.id)
-        context = dict(state.context or {})
-        history = list(context.get("history", []))
+            await session.commit()
 
-        next_state, response_text, next_context = await self._dispatch_state_handler(
-            current_state=state.current_state or "idle",
-            contact=contact,
-            message=normalized_body,
-            context=context,
-            history=history,
-        )
-
-        updated_history = self._append_history(
-            history=history,
-            user_message=normalized_body,
-            assistant_message=response_text,
-        )
-        next_context["history"] = updated_history
-        state.current_state = next_state
-        state.context = next_context
-        state.last_message_at = datetime.now(timezone.utc)
-        state.expires_at = (
-            datetime.now(timezone.utc) + timedelta(hours=2)
-            if next_state != "idle"
-            else None
-        )
-        await self._save_state(state)
-
+        # Send response AFTER committing state (so state is consistent even if send fails)
         if response_text:
-            await self._sms.send_message(to=contact.phone_number, body=response_text)
+            try:
+                await self._sms.send_message(to=phone_number, body=response_text)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "response_send_failed",
+                    phone=mask_phone_number(phone_number),
+                    error=str(exc),
+                )
 
     async def _dispatch_state_handler(
         self,
@@ -124,6 +170,10 @@ class ConversationService:
         return await handler(
             contact=contact, message=message, context=context, history=history
         )
+
+    # ──────────────────────────────────────────────────────────────────
+    # State Handlers — business logic unchanged from original
+    # ──────────────────────────────────────────────────────────────────
 
     async def _handle_idle(
         self,
@@ -515,10 +565,13 @@ class ConversationService:
         context: dict[str, Any],
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
-        # Re-run classification once user provides more detail.
         return await self._handle_idle(
             contact=contact, message=message, context=context, history=history
         )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Helper methods
+    # ──────────────────────────────────────────────────────────────────
 
     async def _begin_booking(
         self,
@@ -526,7 +579,7 @@ class ConversationService:
         intent: IntentResult,
         history: list[dict[str, str]],
     ) -> tuple[str, str, dict[str, Any]]:
-        _ = history  # kept for future enrichment
+        _ = history
         now = datetime.now(timezone.utc)
         slots = await self._scheduling.get_available_slots(
             date_from=now,
@@ -612,50 +665,33 @@ class ConversationService:
                 return str(slot.get("display", f"slot {slot.get('index', '')}"))
         return "that selected time"
 
-    async def _get_or_create_contact(self, phone_number: str) -> Contact:
-        async with AsyncSessionFactory() as session:
-            result = await session.execute(
-                select(Contact).where(Contact.phone_number == phone_number)
-            )
-            contact = result.scalar_one_or_none()
-            if contact is not None:
-                return contact
+    # ──────────────────────────────────────────────────────────────────
+    # Database helpers — use provided session or open standalone
+    # ──────────────────────────────────────────────────────────────────
 
-            contact = Contact(phone_number=phone_number, opt_in_status="pending")
-            session.add(contact)
-            await session.commit()
-            await session.refresh(contact)
-            return contact
+    async def _get_contact(self, session: AsyncSession, phone_number: str) -> Contact | None:
+        result = await session.execute(
+            select(Contact).where(Contact.phone_number == phone_number)
+        )
+        return result.scalar_one_or_none()
 
-    async def _save_contact(self, contact: Contact) -> None:
-        async with AsyncSessionFactory() as session:
-            merged = await session.merge(contact)
-            session.add(merged)
-            await session.commit()
-
-    async def _get_or_create_state(self, contact_id: uuid.UUID) -> ConversationState:
-        async with AsyncSessionFactory() as session:
-            result = await session.execute(
-                select(ConversationState).where(
-                    ConversationState.contact_id == contact_id
-                )
+    async def _get_or_create_state(
+        self, session: AsyncSession, contact_id: uuid.UUID
+    ) -> ConversationState:
+        result = await session.execute(
+            select(ConversationState).where(
+                ConversationState.contact_id == contact_id
             )
-            state = result.scalar_one_or_none()
-            if state is not None:
-                return state
-            state = ConversationState(
-                contact_id=contact_id, current_state="idle", context={}
-            )
-            session.add(state)
-            await session.commit()
-            await session.refresh(state)
+        )
+        state = result.scalar_one_or_none()
+        if state is not None:
             return state
-
-    async def _save_state(self, state: ConversationState) -> None:
-        async with AsyncSessionFactory() as session:
-            merged = await session.merge(state)
-            session.add(merged)
-            await session.commit()
+        state = ConversationState(
+            contact_id=contact_id, current_state="idle", context={}
+        )
+        session.add(state)
+        await session.flush()
+        return state
 
     async def _get_contact_appointments(
         self,

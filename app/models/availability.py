@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -33,6 +33,8 @@ class AvailabilitySlot(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+    appointments = relationship("Appointment", back_populates="slot")
 
     __table_args__ = (
         Index(

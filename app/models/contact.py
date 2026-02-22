@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from sqlalchemy import DateTime, Index, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -41,6 +41,12 @@ class Contact(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    messages = relationship("Message", back_populates="contact")
+    appointments = relationship("Appointment", back_populates="contact")
+    conversation_state = relationship(
+        "ConversationState", back_populates="contact", uselist=False
     )
 
     __table_args__ = (

@@ -4,9 +4,12 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import structlog
 from arq import cron
-from sqlalchemy import select
+from arq.connections import RedisSettings
+from sqlalchemy import select, update
 
+from app.config import get_settings
 from app.core.quiet_hours import is_in_quiet_hours, seconds_until_quiet_hours_end
 from app.database import AsyncSessionFactory
 from app.models.campaign import Campaign
@@ -16,6 +19,8 @@ from app.models.conversation import ConversationState
 from app.models.message import Message
 from app.services.campaign_service import CampaignService
 from app.services.sms_service import SMSService
+
+logger = structlog.get_logger(__name__)
 
 
 async def expire_conversations(ctx: dict) -> int:  # noqa: ARG001
@@ -33,7 +38,25 @@ async def expire_conversations(ctx: dict) -> int:  # noqa: ARG001
             state.context = {}
             state.expires_at = None
         await session.commit()
+        logger.info("conversations_expired", count=len(expired))
         return len(expired)
+
+
+async def _wait_for_rate_limit(redis, campaign_id: str, max_per_second: int) -> None:
+    """Sliding window rate limiter using Redis INCR + EXPIRE."""
+    if not all(hasattr(redis, attr) for attr in ("incr", "expire", "ttl")):
+        # Fallback for simple test doubles or partial Redis clients.
+        await asyncio.sleep(1)
+        return
+
+    key = f"sms_rate:{campaign_id}"
+    current = await redis.incr(key)
+    if current == 1:
+        await redis.expire(key, 1)  # 1-second window
+    if current > max_per_second:
+        ttl = await redis.ttl(key)
+        if ttl > 0:
+            await asyncio.sleep(ttl)
 
 
 async def process_campaign_batch(
@@ -98,7 +121,19 @@ async def process_campaign_batch(
                 delayed = True
                 break
 
-            rendered = campaign_service.render_template(campaign, contact)
+            try:
+                rendered = campaign_service.render_template(campaign, contact)
+            except KeyError as exc:
+                logger.warning(
+                    "template_render_failed",
+                    campaign_id=str(campaign.id),
+                    contact_id=str(contact.id),
+                    missing_key=str(exc),
+                )
+                recipient.status = "failed"
+                await session.commit()
+                continue
+
             try:
                 await sms_service.send_message(
                     to=contact.phone_number,
@@ -111,7 +146,15 @@ async def process_campaign_batch(
             except Exception:  # noqa: BLE001
                 recipient.status = "failed"
             await session.commit()
-            await asyncio.sleep(1)
+            if "redis" in ctx:
+                settings = get_settings()
+                await _wait_for_rate_limit(
+                    ctx["redis"],
+                    str(campaign.id),
+                    settings.twilio_max_sends_per_second,
+                )
+            else:
+                await asyncio.sleep(1)  # Fallback when Redis unavailable
 
     if "redis" in ctx and not delayed and len(recipients) == batch_size:
         await ctx["redis"].enqueue_job(
@@ -120,17 +163,21 @@ async def process_campaign_batch(
     return processed
 
 
-async def retry_failed_sends(ctx: dict) -> int:
+async def retry_failed_sends(ctx: dict) -> int:  # noqa: ARG001
+    """Retry messages stuck in 'queued' status for over 5 minutes.
+
+    FIX: Updates the EXISTING message record's status directly instead of
+    creating a duplicate via sms_service.send_message().
+    """
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
     retried = 0
     sms_service = SMSService()
 
     async with AsyncSessionFactory() as session:
         queued_result = await session.execute(
-            select(Message).where(
-                Message.status == "queued",
-                Message.created_at < cutoff,
-            )
+            select(Message)
+            .where(Message.status == "queued", Message.created_at < cutoff)
+            .limit(50)
         )
         queued = queued_result.scalars().all()
         for msg in queued:
@@ -139,23 +186,49 @@ async def retry_failed_sends(ctx: dict) -> int:
             )
             contact = contact_result.scalar_one_or_none()
             if contact is None:
+                msg.status = "failed"
+                msg.error_message = "Contact not found"
+                await session.commit()
                 continue
             try:
-                sent = await sms_service.send_message(
-                    to=contact.phone_number,
+                # Send via Twilio but update THIS record, don't create a new one
+                import asyncio as _asyncio
+                from twilio.base.exceptions import TwilioRestException
+
+                twilio_message = await _asyncio.to_thread(
+                    sms_service._client.messages.create,
                     body=msg.body,
-                    campaign_id=str(msg.campaign_id) if msg.campaign_id else None,
+                    from_=sms_service._settings.twilio_phone_number,
+                    to=contact.phone_number,
+                    status_callback=sms_service._settings.twilio_status_callback_url,
                 )
-                msg.status = sent.status
-                msg.sms_sid = sent.sms_sid
+                msg.sms_sid = twilio_message.sid
+                msg.status = "sent"
                 retried += 1
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 msg.status = "failed"
+                msg.error_message = str(exc)
             await session.commit()
+    logger.info("retry_failed_sends_complete", retried=retried)
     return retried
 
 
+def _parse_redis_url(url: str) -> RedisSettings:
+    """Parse redis://host:port/db into arq RedisSettings."""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    return RedisSettings(
+        host=parsed.hostname or "redis",
+        port=parsed.port or 6379,
+        database=int(parsed.path.lstrip("/") or "0"),
+        password=parsed.password,
+    )
+
+
 class WorkerSettings:
+    settings = get_settings()
+    redis_settings = _parse_redis_url(settings.redis_url)
+
     functions = [expire_conversations, process_campaign_batch, retry_failed_sends]
     cron_jobs = [
         cron(

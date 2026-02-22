@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
@@ -97,49 +97,50 @@ class CampaignService:
 
     async def get_campaign_stats(self, campaign_id: uuid.UUID) -> dict[str, int]:
         async with self._session_factory() as session:
-            total = await session.scalar(
-                select(func.count())
-                .select_from(CampaignRecipient)
+            query = (
+                select(
+                    func.count().label("total"),
+                    func.count(
+                        case((CampaignRecipient.status == "sent", 1))
+                    ).label("sent"),
+                    func.count(
+                        case((CampaignRecipient.status == "delivered", 1))
+                    ).label("delivered"),
+                    func.count(
+                        case((CampaignRecipient.status == "failed", 1))
+                    ).label("failed"),
+                )
                 .where(CampaignRecipient.campaign_id == campaign_id)
             )
-            sent = await session.scalar(
-                select(func.count())
-                .select_from(CampaignRecipient)
-                .where(
-                    CampaignRecipient.campaign_id == campaign_id,
-                    CampaignRecipient.status == "sent",
-                )
-            )
-            delivered = await session.scalar(
-                select(func.count())
-                .select_from(CampaignRecipient)
-                .where(
-                    CampaignRecipient.campaign_id == campaign_id,
-                    CampaignRecipient.status == "delivered",
-                )
-            )
-            failed = await session.scalar(
-                select(func.count())
-                .select_from(CampaignRecipient)
-                .where(
-                    CampaignRecipient.campaign_id == campaign_id,
-                    CampaignRecipient.status == "failed",
-                )
-            )
+            result = await session.execute(query)
+            row = result.one()
             return {
-                "total_recipients": int(total or 0),
-                "sent_count": int(sent or 0),
-                "delivered_count": int(delivered or 0),
-                "failed_count": int(failed or 0),
+                "total_recipients": int(row.total or 0),
+                "sent_count": int(row.sent or 0),
+                "delivered_count": int(row.delivered or 0),
+                "failed_count": int(row.failed or 0),
             }
 
     def render_template(self, campaign: Campaign, contact: Contact) -> str:
+        """Render campaign message template with contact variables.
+
+        Uses string.Template.safe_substitute to:
+        1. Never crash on missing variables (leaves placeholder as-is)
+        2. Prevent attribute access injection ({first_name.__class__} stays literal)
+        """
+        from string import Template
+
         variables = {
-            "first_name": contact.first_name or "there",
+            "first_name": getattr(contact, "first_name", None) or "there",
+            "last_name": getattr(contact, "last_name", None) or "",
             "business_name": self._settings.business_name,
             "phone_number": self._settings.twilio_phone_number,
         }
-        return campaign.message_template.format(**variables)
+        # Convert {var} style to $var style for string.Template
+        template_text = campaign.message_template
+        for key in variables:
+            template_text = template_text.replace("{" + key + "}", "${" + key + "}")
+        return Template(template_text).safe_substitute(variables)
 
     async def _update_status(self, campaign_id: uuid.UUID, status: str) -> Campaign:
         async with self._session_factory() as session:

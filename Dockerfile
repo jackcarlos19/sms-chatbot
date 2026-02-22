@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
@@ -13,4 +13,6 @@ COPY . /app
 
 EXPOSE 8000
 
+# Default: run the FastAPI app. Override with arq for worker.
+# docker-compose can use: command: arq app.workers.tasks.WorkerSettings
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

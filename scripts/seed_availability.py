@@ -15,6 +15,8 @@ def _build_slots(start_date: datetime) -> list[tuple[datetime, datetime]]:
 
     for day_offset in range(7):
         day = (start_date + timedelta(days=day_offset)).date()
+        if day.weekday() >= 5:  # Skip Saturday (5) and Sunday (6)
+            continue
         current = datetime.combine(day, opening, tzinfo=timezone.utc)
         day_end = datetime.combine(day, closing, tzinfo=timezone.utc)
         while current < day_end:

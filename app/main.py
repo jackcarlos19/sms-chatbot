@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 import uuid
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -23,6 +24,26 @@ log = structlog.get_logger(__name__)
 app = FastAPI(title="SMS Chatbot API")
 app.include_router(webhooks_router)
 app.include_router(admin_router)
+
+# --- Admin SPA static serving ---
+_admin_dist = os.path.join(os.path.dirname(__file__), "..", "admin", "dist")
+if os.path.isdir(_admin_dist):
+    _admin_assets = os.path.join(_admin_dist, "assets")
+    if os.path.isdir(_admin_assets):
+        app.mount(
+            "/admin/assets",
+            StaticFiles(directory=_admin_assets),
+            name="admin-assets",
+        )
+
+    @app.get("/admin")
+    async def admin_root():
+        return FileResponse(os.path.join(_admin_dist, "index.html"))
+
+    @app.get("/admin/{rest_of_path:path}")
+    async def admin_spa(rest_of_path: str):
+        return FileResponse(os.path.join(_admin_dist, "index.html"))
+
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 

@@ -1,3 +1,12 @@
+# Stage 1: Build admin frontend
+FROM node:20-alpine AS admin-build
+WORKDIR /build
+COPY admin/package.json admin/package-lock.json ./
+RUN npm ci
+COPY admin/ ./
+RUN npm run build
+
+# Stage 2: Python application
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -11,8 +20,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 COPY . /app
 
+# Copy built admin frontend from stage 1
+COPY --from=admin-build /build/dist /app/admin/dist
+
 EXPOSE 8000
 
-# Default: run the FastAPI app. Override with arq for worker.
-# docker-compose can use: command: arq app.workers.tasks.WorkerSettings
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

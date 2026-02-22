@@ -5,6 +5,7 @@ import uuid
 import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api.admin import router as admin_router
@@ -22,6 +23,7 @@ log = structlog.get_logger(__name__)
 app = FastAPI(title="SMS Chatbot API")
 app.include_router(webhooks_router)
 app.include_router(admin_router)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.middleware("http")
@@ -74,3 +76,10 @@ async def health_check() -> HealthResponse:
         ) from exc
 
     return HealthResponse(status="green", db=db_status, redis=redis_status)
+
+
+@app.get("/demo")
+async def demo_redirect():
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse("/static/simulator.html")

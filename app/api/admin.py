@@ -8,11 +8,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.api.deps import get_ai_service, get_redis_client, get_scheduling_service
 from app.config import get_settings
 from app.database import AsyncSessionFactory
 from app.models.appointment import Appointment
 from app.models.campaign import Campaign
 from app.models.contact import Contact
+from app.models.conversation import ConversationState
 from app.models.message import Message
 from app.schemas import (
     AppointmentResponse,
@@ -21,7 +23,9 @@ from app.schemas import (
     ContactResponse,
     MessageResponse,
 )
+from app.services.conversation_service import ConversationService
 from app.services.campaign_service import CampaignService
+from app.services.sms_service import SMSService
 
 router = APIRouter(prefix="/api", tags=["admin"])
 
@@ -41,6 +45,41 @@ class CampaignCreateRequest(BaseModel):
 class CampaignPatchRequest(BaseModel):
     status: Optional[str] = None
     scheduled_at: Optional[datetime] = None
+
+
+class SimulateRequest(BaseModel):
+    phone_number: str = "+15551234567"
+    message: str
+
+
+class SimulatorSMSService(SMSService):
+    """SMS service that captures messages instead of sending via Twilio."""
+
+    def __init__(self) -> None:
+        self._settings = get_settings()
+        self._sent: list[dict[str, str]] = []
+
+    async def send_message(
+        self,
+        to: str,
+        body: str,
+        campaign_id: str | None = None,
+        force_send: bool = False,
+    ) -> Message:
+        _ = (campaign_id, force_send)
+        self._sent.append({"to": to, "body": body})
+        async with AsyncSessionFactory() as session:
+            contact = await self._get_or_create_contact(session, to)
+            message = Message(
+                contact_id=contact.id,
+                direction="outbound",
+                body=body,
+                status="simulated",
+            )
+            session.add(message)
+            await session.commit()
+            await session.refresh(message)
+            return message
 
 
 @router.get(
@@ -220,3 +259,49 @@ async def list_messages(contact_id: str) -> list[dict]:
             }
             for msg in messages
         ]
+
+
+@router.post(
+    "/simulate/inbound",
+    dependencies=[Depends(verify_admin_api_key)],
+)
+async def simulate_inbound(payload: SimulateRequest) -> dict:
+    fake_sms = SimulatorSMSService()
+    conv_service = ConversationService(
+        ai_service=get_ai_service(),
+        scheduling_service=get_scheduling_service(),
+        sms_service=fake_sms,
+        redis_client=get_redis_client(),
+    )
+
+    async with AsyncSessionFactory() as session:
+        contact = await fake_sms._get_or_create_contact(session, payload.phone_number)
+        inbound = Message(
+            contact_id=contact.id,
+            direction="inbound",
+            body=payload.message,
+            status="received",
+            sms_sid=f"SIM_{uuid.uuid4().hex[:16]}",
+        )
+        session.add(inbound)
+        await session.commit()
+
+    await conv_service.process_inbound_message(
+        phone_number=payload.phone_number,
+        body=payload.message,
+        sms_sid=f"SIM_{uuid.uuid4().hex[:16]}",
+    )
+
+    async with AsyncSessionFactory() as session:
+        result = await session.execute(
+            select(ConversationState)
+            .join(Contact, ConversationState.contact_id == Contact.id)
+            .where(Contact.phone_number == payload.phone_number)
+        )
+        state = result.scalar_one_or_none()
+
+    return {
+        "responses": [msg["body"] for msg in fake_sms._sent],
+        "conversation_state": state.current_state if state else "idle",
+        "context": state.context if state else {},
+    }

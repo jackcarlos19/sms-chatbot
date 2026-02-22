@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SMS Chatbot Simulator</title>
+    <style>
+      :root {
+        --bg: #f2f2f7;
+        --card: #ffffff;
+        --text: #111827;
+        --muted: #6b7280;
+        --user: #0b84ff;
+        --bot: #e5e7eb;
+        --accent: #16a34a;
+        --border: #d1d5db;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+      }
+
+      .phone {
+        width: 100%;
+        max-width: 480px;
+        background: var(--card);
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .header {
+        padding: 14px;
+        border-bottom: 1px solid var(--border);
+        background: #fafafa;
+      }
+
+      .title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .title {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .state {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .controls {
+        display: grid;
+        gap: 8px;
+      }
+
+      input {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+
+      .chat {
+        flex: 1;
+        overflow-y: auto;
+        padding: 14px;
+        background: var(--bg);
+      }
+
+      .bubble {
+        max-width: 85%;
+        padding: 10px 12px;
+        border-radius: 16px;
+        margin-bottom: 10px;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .bubble.user {
+        margin-left: auto;
+        background: var(--user);
+        color: #fff;
+        border-bottom-right-radius: 4px;
+      }
+
+      .bubble.bot {
+        margin-right: auto;
+        background: var(--bot);
+        color: var(--text);
+        border-bottom-left-radius: 4px;
+      }
+
+      .footer {
+        display: flex;
+        gap: 8px;
+        padding: 12px;
+        border-top: 1px solid var(--border);
+        background: #fff;
+      }
+
+      .footer input {
+        flex: 1;
+      }
+
+      button {
+        border: none;
+        background: var(--user);
+        color: #fff;
+        border-radius: 10px;
+        padding: 0 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="phone">
+      <div class="header">
+        <div class="title-row">
+          <div class="title">SMS Chatbot Simulator</div>
+          <span class="state" id="stateBadge">idle</span>
+        </div>
+        <div class="controls">
+          <input id="phoneNumber" value="+15551234567" />
+          <input id="apiKey" value="change-this-admin-key" />
+        </div>
+        <div class="hint">
+          Sends to <code>/api/simulate/inbound</code>. No Twilio messages are sent.
+        </div>
+      </div>
+
+      <div class="chat" id="chat"></div>
+
+      <div class="footer">
+        <input id="messageInput" placeholder="Type a message..." />
+        <button id="sendButton">Send</button>
+      </div>
+    </div>
+
+    <script>
+      const chat = document.getElementById("chat");
+      const stateBadge = document.getElementById("stateBadge");
+      const phoneInput = document.getElementById("phoneNumber");
+      const apiKeyInput = document.getElementById("apiKey");
+      const msgInput = document.getElementById("messageInput");
+      const sendBtn = document.getElementById("sendButton");
+
+      function addBubble(text, role) {
+        const el = document.createElement("div");
+        el.className = `bubble ${role}`;
+        el.textContent = text;
+        chat.appendChild(el);
+        chat.scrollTop = chat.scrollHeight;
+      }
+
+      async function sendMessage() {
+        const message = msgInput.value.trim();
+        const phone = phoneInput.value.trim();
+        const apiKey = apiKeyInput.value.trim();
+        if (!message || !phone || !apiKey) return;
+
+        addBubble(message, "user");
+        msgInput.value = "";
+        sendBtn.disabled = true;
+
+        try {
+          const response = await fetch("/api/simulate/inbound", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-API-Key": apiKey,
+            },
+            body: JSON.stringify({
+              phone_number: phone,
+              message,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            addBubble(`Error ${response.status}: ${errorText}`, "bot");
+            return;
+          }
+
+          const data = await response.json();
+          const responses = data.responses || [];
+          if (responses.length === 0) {
+            addBubble("(No bot response)", "bot");
+          } else {
+            responses.forEach((text) => addBubble(text, "bot"));
+          }
+          stateBadge.textContent = data.conversation_state || "idle";
+        } catch (err) {
+          addBubble(`Request failed: ${err}`, "bot");
+        } finally {
+          sendBtn.disabled = false;
+          msgInput.focus();
+        }
+      }
+
+      sendBtn.addEventListener("click", sendMessage);
+      msgInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") sendMessage();
+      });
+
+      addBubble("Simulator ready. Send a message to start.", "bot");
+    </script>
+  </body>
+</html>

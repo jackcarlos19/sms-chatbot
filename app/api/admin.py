@@ -91,7 +91,9 @@ async def list_campaigns(limit: int = 100, offset: int = 0) -> list[dict]:
 
 @router.post("/campaigns", dependencies=[Depends(verify_admin_api_key)])
 async def create_campaign(payload: CampaignCreateRequest) -> dict:
-    service = CampaignService()
+    from app.api.deps import get_campaign_service
+
+    service = get_campaign_service()
     campaign = await service.create_campaign(
         name=payload.name,
         message_template=payload.message_template,

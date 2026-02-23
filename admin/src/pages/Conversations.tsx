@@ -6,7 +6,7 @@ import { Card, CardContent } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 
-function getStateBadgeVariant(state: string) {
+function getStateBadgeVariant(state: string): "secondary" | "success" | "destructive" | "warning" {
   if (state === 'idle') return 'secondary'
   if (state === 'confirmed') return 'success'
   if (state === 'cancelling') return 'destructive'
@@ -106,7 +106,7 @@ export default function Conversations() {
                       <td className="whitespace-nowrap px-6 py-4 font-medium text-foreground">{row.contact_phone}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{row.contact_name}</td>
                       <td className="whitespace-nowrap px-6 py-4">
-                        <Badge variant={getStateBadgeVariant(row.current_state) as any}>
+                        <Badge variant={getStateBadgeVariant(row.current_state)}>
                           {row.current_state.replace('_', ' ')}
                         </Badge>
                       </td>

@@ -48,6 +48,7 @@ export default function Slots() {
 
   useEffect(() => {
     loadSlots()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysAhead])
 
   const weekDays = useMemo(() => {

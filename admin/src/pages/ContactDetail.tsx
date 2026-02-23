@@ -11,7 +11,7 @@ function statusColor(status: string): string {
   return 'text-muted-foreground'
 }
 
-function getAppointmentBadgeVariant(status: string) {
+function getAppointmentBadgeVariant(status: string): "success" | "destructive" | "warning" | "secondary" {
   if (status === 'confirmed') return 'success'
   if (status === 'cancelled') return 'destructive'
   if (status === 'rescheduled') return 'warning'
@@ -185,7 +185,7 @@ export default function ContactDetail() {
                   {appointments.map((appointment) => (
                     <div key={appointment.id} className="rounded-lg border border-border bg-card p-3 shadow-sm transition-colors hover:bg-muted/50">
                       <div className="mb-2 flex items-center justify-between">
-                        <Badge variant={getAppointmentBadgeVariant(appointment.status) as any}>
+                        <Badge variant={getAppointmentBadgeVariant(appointment.status)}>
                           {appointment.status}
                         </Badge>
                       </div>

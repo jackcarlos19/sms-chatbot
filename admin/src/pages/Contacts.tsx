@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button'
 
 const PAGE_SIZE = 50
 
-function getStatusBadgeVariant(status: string) {
+function getStatusBadgeVariant(status: string): "success" | "destructive" | "warning" | "secondary" {
   if (status === 'opted_in') return 'success'
   if (status === 'opted_out') return 'destructive'
   if (status === 'pending') return 'warning'
@@ -141,7 +141,7 @@ export default function Contacts() {
                       <td className="whitespace-nowrap px-6 py-4 font-medium text-foreground">{contact.phone_number}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{displayName(contact)}</td>
                       <td className="whitespace-nowrap px-6 py-4">
-                        <Badge variant={getStatusBadgeVariant(contact.opt_in_status) as any}>
+                        <Badge variant={getStatusBadgeVariant(contact.opt_in_status)}>
                           {contact.opt_in_status.replace('_', ' ')}
                         </Badge>
                       </td>

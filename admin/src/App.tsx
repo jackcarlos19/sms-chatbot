@@ -19,7 +19,7 @@ const ThemeContext = React.createContext<{ theme: 'light' | 'dark'; toggleTheme:
   toggleTheme: () => {},
 })
 
-export function useTheme() {
+function useTheme() {
   return React.useContext(ThemeContext)
 }
 
@@ -159,6 +159,7 @@ function AppShell() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line
     setMobileOpen(false)
   }, [location.pathname])
 

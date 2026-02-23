@@ -7,7 +7,7 @@ import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 
-function getStatusVariant(status: string) {
+function getStatusVariant(status: string): "default" | "success" | "warning" | "secondary" | "outline" {
   if (status === 'scheduled') return 'default'
   if (status === 'active') return 'success'
   if (status === 'paused') return 'warning'
@@ -169,7 +169,7 @@ export default function Campaigns() {
                     <div>
                       <h2 className="text-lg font-semibold text-foreground flex items-center gap-3">
                         {campaign.name}
-                        <Badge variant={getStatusVariant(campaign.status) as any}>
+                        <Badge variant={getStatusVariant(campaign.status)}>
                           {campaign.status}
                         </Badge>
                       </h2>

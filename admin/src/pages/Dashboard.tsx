@@ -6,14 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 
-function getStatusBadgeVariant(status: string) {
+function getStatusBadgeVariant(status: string): "success" | "destructive" | "warning" | "secondary" {
   if (status === 'confirmed') return 'success'
   if (status === 'cancelled') return 'destructive'
   if (status === 'rescheduled') return 'warning'
   return 'secondary'
 }
 
-function getConversationBadgeVariant(state: string) {
+function getConversationBadgeVariant(state: string): "secondary" | "success" | "destructive" | "warning" {
   if (state === 'idle') return 'secondary'
   if (state === 'confirmed') return 'success'
   if (state === 'cancelling') return 'destructive'
@@ -169,7 +169,7 @@ export default function Dashboard() {
                           <span className="ml-1 hidden text-xs sm:inline">({formatTime(item.slot_start)})</span>
                         </td>
                         <td className="px-6 py-3 text-right">
-                          <Badge variant={getStatusBadgeVariant(item.status) as any}>
+                          <Badge variant={getStatusBadgeVariant(item.status)}>
                             {item.status}
                           </Badge>
                         </td>
@@ -200,7 +200,7 @@ export default function Dashboard() {
                       <p className="mt-1 text-xs text-muted-foreground">Last message: {formatDate(item.last_message_at)}</p>
                     </div>
                     <div className="mt-2 sm:mt-0">
-                      <Badge variant={getConversationBadgeVariant(item.current_state) as any}>
+                      <Badge variant={getConversationBadgeVariant(item.current_state)}>
                         {item.current_state.replace('_', ' ')}
                       </Badge>
                     </div>

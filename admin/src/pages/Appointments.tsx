@@ -24,7 +24,7 @@ function durationMinutes(startIso: string, endIso: string): number {
   return Math.max(0, Math.round((end - start) / 60000))
 }
 
-function getBadgeVariant(status: string) {
+function getBadgeVariant(status: string): "success" | "destructive" | "warning" | "secondary" {
   if (status === 'confirmed') return 'success'
   if (status === 'cancelled') return 'destructive'
   if (status === 'rescheduled') return 'warning'
@@ -60,6 +60,7 @@ export default function Appointments() {
 
   useEffect(() => {
     loadRows(0, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const onStatusChange = async (value: string) => {
@@ -143,7 +144,7 @@ export default function Appointments() {
                         {durationMinutes(appointment.slot_start, appointment.slot_end)} min
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
-                        <Badge variant={getBadgeVariant(appointment.status) as any}>
+                        <Badge variant={getBadgeVariant(appointment.status)}>
                           {appointment.status}
                         </Badge>
                       </td>

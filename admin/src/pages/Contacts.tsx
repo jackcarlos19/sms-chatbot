@@ -53,7 +53,13 @@ export default function Contacts() {
   }, [contacts, search, status])
 
   if (loading) {
-    return <div className="animate-pulse text-gray-500">Loading contacts...</div>
+    return (
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+        <div className="h-6 w-40 animate-pulse rounded bg-gray-200" />
+        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+      </div>
+    )
   }
 
   return (
@@ -99,7 +105,7 @@ export default function Contacts() {
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="bg-gray-50 text-xs uppercase text-gray-500">
+              <tr className="bg-gray-50 text-xs font-medium uppercase text-gray-500">
                 <th className="px-4 py-3">Phone Number</th>
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Status</th>

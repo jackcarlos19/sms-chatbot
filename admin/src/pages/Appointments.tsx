@@ -66,7 +66,13 @@ export default function Appointments() {
   }
 
   if (loading) {
-    return <div className="animate-pulse text-gray-500">Loading appointments...</div>
+    return (
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+        <div className="h-6 w-44 animate-pulse rounded bg-gray-200" />
+        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+      </div>
+    )
   }
 
   return (
@@ -105,7 +111,7 @@ export default function Appointments() {
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="bg-gray-50 text-xs uppercase text-gray-500">
+              <tr className="bg-gray-50 text-xs font-medium uppercase text-gray-500">
                 <th className="px-4 py-3">Contact</th>
                 <th className="px-4 py-3">Date/Time</th>
                 <th className="px-4 py-3">Duration</th>

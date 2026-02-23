@@ -74,7 +74,13 @@ export default function Slots() {
   const canGoPrev = weekStart > startOfWeek(new Date())
 
   if (loading) {
-    return <div className="animate-pulse text-gray-500">Loading slots...</div>
+    return (
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+        <div className="h-6 w-40 animate-pulse rounded bg-gray-200" />
+        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+        <div className="h-20 w-full animate-pulse rounded bg-gray-200" />
+      </div>
+    )
   }
 
   return (

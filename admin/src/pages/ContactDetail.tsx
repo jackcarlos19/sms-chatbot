@@ -59,7 +59,13 @@ export default function ContactDetail() {
   }, [orderedMessages.length])
 
   if (loading) {
-    return <div className="animate-pulse text-gray-500">Loading contact details...</div>
+    return (
+      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+        <div className="h-6 w-52 animate-pulse rounded bg-gray-200" />
+        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+        <div className="h-48 w-full animate-pulse rounded bg-gray-200" />
+      </div>
+    )
   }
 
   if (error || !contact) {

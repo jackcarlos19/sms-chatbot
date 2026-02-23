@@ -1,10 +1,27 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Calendar, dateFnsLocalizer } from 'react-big-calendar'
+import 'react-big-calendar/lib/css/react-big-calendar.css'
+import { format, parse, startOfWeek, getDay } from 'date-fns'
+import { enUS } from 'date-fns/locale/en-US'
 import { api, type AppointmentFull } from '../api'
 import { formatDate } from '../utils'
 import { Card, CardContent } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { Select } from '../components/ui/Select'
+
+const locales = {
+  'en-US': enUS,
+}
+
+const localizer = dateFnsLocalizer({
+  format,
+  parse,
+  startOfWeek,
+  getDay,
+  locales,
+})
 
 const PAGE_SIZE = 50
 
@@ -114,16 +131,16 @@ export default function Appointments() {
               placeholder="Search by contact name or phone"
               className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-[260px]"
             />
-            <select
+            <Select
               value={statusFilter}
               onChange={(event) => onStatusChange(event.target.value)}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-[200px]"
+              className="w-[200px]"
             >
               <option value="all">All Appointments</option>
               <option value="confirmed">Confirmed</option>
               <option value="cancelled">Cancelled</option>
               <option value="rescheduled">Rescheduled</option>
-            </select>
+            </Select>
             <input
               type="date"
               value={dateFrom}
@@ -174,7 +191,7 @@ export default function Appointments() {
                       onClick={() => navigate(`/appointments/${appointment.id}`)}
                     >
                       <td className="whitespace-nowrap px-6 py-4">
-                        <Link to={`/contacts/${appointment.contact_id}`} className="font-medium text-foreground hover:underline">
+                        <Link to={`/contacts/${appointment.contact_id}`} className="font-medium text-foreground hover:underline" onClick={(e) => e.stopPropagation()}>
                           {appointment.contact_name || appointment.contact_phone}
                         </Link>
                         {appointment.contact_name && (
@@ -197,24 +214,21 @@ export default function Appointments() {
               </table>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
-              {rows.map((appointment) => (
-                <button
-                  key={appointment.id}
-                  type="button"
-                  onClick={() => navigate(`/appointments/${appointment.id}`)}
-                  className="rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
-                >
-                  <p className="text-sm font-semibold text-foreground">
-                    {appointment.contact_name || appointment.contact_phone}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">{appointment.contact_phone}</p>
-                  <p className="mt-3 text-sm text-foreground">{formatSlot(appointment.slot_start)}</p>
-                  <div className="mt-2">
-                    <Badge variant={getBadgeVariant(appointment.status)}>{appointment.status}</Badge>
-                  </div>
-                </button>
-              ))}
+            <div className="h-[600px] p-4">
+              <Calendar
+                localizer={localizer}
+                events={rows.map((appointment) => ({
+                  id: appointment.id,
+                  title: `${appointment.contact_name || appointment.contact_phone} (${appointment.status})`,
+                  start: new Date(appointment.slot_start),
+                  end: new Date(appointment.slot_end),
+                  resource: appointment,
+                }))}
+                startAccessor="start"
+                endAccessor="end"
+                onSelectEvent={(event: any) => navigate(`/appointments/${event.id}`)}
+                views={['month', 'week', 'day']}
+              />
             </div>
           )}
         </CardContent>

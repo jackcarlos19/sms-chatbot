@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { Textarea } from '../components/ui/Textarea'
 
 function getStatusVariant(status: string): "default" | "success" | "warning" | "secondary" | "outline" {
   if (status === 'scheduled') return 'default'
@@ -127,11 +128,10 @@ export default function Campaigns() {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">Use {'{first_name}'}, {'{last_name}'}</p>
-                <textarea
+                <Textarea
                   value={template}
                   onChange={(event) => setTemplate(event.target.value)}
                   placeholder="Hi {first_name}, time for your spring tune-up!"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   rows={4}
                   required
                 />

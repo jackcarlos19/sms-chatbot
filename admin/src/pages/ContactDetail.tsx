@@ -13,6 +13,7 @@ import { Button } from '../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Input } from '../components/ui/Input'
+import { Select } from '../components/ui/Select'
 
 function statusColor(status: string): string {
   if (status === 'delivered') return 'text-green-600 dark:text-green-400'
@@ -239,17 +240,16 @@ export default function ContactDetail() {
                     setFormState((prev) => ({ ...prev, timezone: event.target.value }))
                   }
                 />
-                <select
+                <Select
                   value={formState.opt_in_status}
                   onChange={(event) =>
                     setFormState((prev) => ({ ...prev, opt_in_status: event.target.value }))
                   }
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="opted_in">Opted in</option>
                   <option value="opted_out">Opted out</option>
                   <option value="pending">Pending</option>
-                </select>
+                </Select>
                 <Button type="submit" size="sm" disabled={saving}>
                   {saving ? 'Saving...' : 'Save Contact'}
                 </Button>

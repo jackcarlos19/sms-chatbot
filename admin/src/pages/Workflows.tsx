@@ -6,6 +6,8 @@ import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
+import { Select } from '../components/ui/Select'
+import { Textarea } from '../components/ui/Textarea'
 
 export default function Workflows() {
   const [workflows, setWorkflows] = useState<ReminderWorkflow[]>([])
@@ -13,6 +15,7 @@ export default function Workflows() {
   const [minutesBefore, setMinutesBefore] = useState('60')
   const [template, setTemplate] = useState('')
   const [status, setStatus] = useState('')
+  const [channel, setChannel] = useState('sms')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -39,12 +42,14 @@ export default function Workflows() {
         name: name.trim(),
         appointment_status: status || undefined,
         minutes_before: Number(minutesBefore),
+        channel: channel,
         template: template.trim(),
       })
       setName('')
       setMinutesBefore('60')
       setTemplate('')
       setStatus('')
+      setChannel('sms')
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create workflow')
@@ -72,19 +77,44 @@ export default function Workflows() {
       <Card>
         <CardHeader><CardTitle className="text-base">Create Workflow</CardTitle></CardHeader>
         <CardContent>
-          <form className="grid grid-cols-1 gap-3 md:grid-cols-4" onSubmit={onCreate}>
-            <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" required />
-            <Input value={minutesBefore} onChange={(event) => setMinutesBefore(event.target.value)} placeholder="Minutes before" type="number" required />
-            <Input value={status} onChange={(event) => setStatus(event.target.value)} placeholder="Appointment status (optional)" />
-            <Button type="submit">Create</Button>
-            <textarea
-              value={template}
-              onChange={(event) => setTemplate(event.target.value)}
-              placeholder="Reminder template"
-              className="md:col-span-4 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              rows={3}
-              required
-            />
+          <form className="grid grid-cols-1 gap-3 md:grid-cols-5" onSubmit={onCreate}>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Name</label>
+              <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" required />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Minutes before</label>
+              <Input value={minutesBefore} onChange={(event) => setMinutesBefore(event.target.value)} placeholder="Minutes before" type="number" required />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Appt. Status (opt)</label>
+              <Select value={status} onChange={(event) => setStatus(event.target.value)}>
+                <option value="">Any Status</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Channel</label>
+              <Select value={channel} onChange={(event) => setChannel(event.target.value)}>
+                <option value="sms">SMS</option>
+                <option value="email">Email</option>
+                <option value="voice">Voice</option>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground invisible">Action</label>
+              <Button type="submit">Create</Button>
+            </div>
+            <div className="md:col-span-5 flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Template</label>
+              <Textarea
+                value={template}
+                onChange={(event) => setTemplate(event.target.value)}
+                placeholder="Reminder template"
+                required
+              />
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -99,7 +129,7 @@ export default function Workflows() {
               <div>
                 <p className="text-sm font-medium">{workflow.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {workflow.minutes_before} min before · {workflow.appointment_status || 'all statuses'} · Created {formatDate(workflow.created_at)}
+                  {workflow.minutes_before} min before · {workflow.appointment_status || 'all statuses'} · {workflow.channel || 'sms'} · Created {formatDate(workflow.created_at)}
                 </p>
               </div>
               <div className="flex items-center gap-2">

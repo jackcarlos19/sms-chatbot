@@ -397,6 +397,11 @@ export const api = {
       },
     ),
   getAdminUsers: () => apiFetch<AdminUser[]>('/admin-users'),
+  createAdminUser: (data: { username: string; role: string; is_active?: boolean }) =>
+    apiFetch<AdminUser>('/admin-users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   getHealth: () => apiFetch<HealthStatus>('/health'),
   simulate: (phone: string, message: string) =>
     apiFetch<SimulateResponse>('/simulate/inbound', {

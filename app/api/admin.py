@@ -263,6 +263,12 @@ class WaitlistPatchRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class AdminUserCreateRequest(BaseModel):
+    username: str
+    role: str = "admin"
+    is_active: bool = True
+
+
 class ReminderWorkflowCreateRequest(BaseModel):
     name: str
     appointment_status: Optional[str] = None
@@ -1508,6 +1514,53 @@ async def patch_reminder_workflow(
                 "name": workflow.name,
                 "minutes_before": workflow.minutes_before,
                 "is_active": workflow.is_active,
+            }
+
+
+@router.post("/admin-users", dependencies=[Depends(verify_admin_access)])
+async def create_admin_user(
+    payload: AdminUserCreateRequest,
+    request: Request,
+    x_tenant_id: str = Header(default=""),
+) -> dict:
+    _require_admin_csrf(request)
+    async with AsyncSessionFactory() as session:
+        async with session.begin():
+            tenant_id = await _resolve_tenant_id(session, x_tenant_id)
+            existing = await session.execute(
+                select(AdminUser).where(AdminUser.username == payload.username)
+            )
+            if existing.scalar_one_or_none() is not None:
+                raise HTTPException(status_code=400, detail="Username already exists")
+
+            user = AdminUser(
+                tenant_id=tenant_id,
+                username=payload.username.strip(),
+                role=payload.role.strip(),
+                is_active=payload.is_active,
+            )
+            session.add(user)
+            await session.flush()
+            await _write_audit_event(
+                session,
+                tenant_id=tenant_id,
+                actor_username=_actor_username_from_token(request),
+                entity_type="admin_user",
+                entity_id=user.id,
+                action="admin_user.created",
+                before_json={},
+                after_json={
+                    "username": user.username,
+                    "role": user.role,
+                    "is_active": user.is_active,
+                },
+                request=request,
+            )
+            return {
+                "id": str(user.id),
+                "username": user.username,
+                "role": user.role,
+                "is_active": user.is_active,
             }
 
 

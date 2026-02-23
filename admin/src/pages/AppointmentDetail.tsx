@@ -7,6 +7,8 @@ import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
+import { Select } from '../components/ui/Select'
+import { Textarea } from '../components/ui/Textarea'
 
 function getAppointmentBadgeVariant(status: string): "success" | "destructive" | "warning" | "secondary" {
   if (status === 'confirmed') return 'success'
@@ -139,11 +141,10 @@ export default function AppointmentDetailPage() {
         <Card>
           <CardHeader><CardTitle className="text-base">Internal Notes</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            <textarea
+            <Textarea
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               rows={4}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               placeholder="Add admin notes..."
             />
             <Button size="sm" onClick={onSaveNotes} disabled={working}>
@@ -173,10 +174,9 @@ export default function AppointmentDetailPage() {
       <Card>
         <CardHeader><CardTitle className="text-base">Reschedule</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <select
+          <Select
             value={selectedSlotId}
             onChange={(event) => setSelectedSlotId(event.target.value)}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             <option value="">Select a new available slot</option>
             {rescheduleOptions.map((slot) => (
@@ -184,7 +184,7 @@ export default function AppointmentDetailPage() {
                 {formatDate(slot.start_time)} - {formatDate(slot.end_time)}
               </option>
             ))}
-          </select>
+          </Select>
           <Button size="sm" onClick={onReschedule} disabled={working || !selectedSlotId}>
             {working ? 'Rescheduling...' : 'Reschedule'}
           </Button>

@@ -226,6 +226,43 @@ class ConversationService:
         history: list[dict[str, str]],
         session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
+        normalized = (message or "").strip().lower()
+        if "reschedule" in normalized:
+            appointments = await self._get_contact_appointments(
+                contact.id,
+                status_filter=["confirmed"],
+                session=session,
+            )
+            if not appointments:
+                return (
+                    "idle",
+                    "I couldn't find an active appointment to reschedule.",
+                    {"retry_count": 0},
+                )
+            original = appointments[0]
+            alternatives = await self._scheduling.get_fresh_alternatives(
+                exclude_slot_ids=[original.slot_id],
+                limit=5,
+            )
+            if not alternatives:
+                return (
+                    "idle",
+                    "I don't see alternative slots right now. Please try again soon.",
+                    {"retry_count": 0},
+                )
+            presented = self._serialize_presented_slots(alternatives, contact.timezone)
+            prompt = self._ai.generate_slot_presentation(presented, contact.timezone)
+            return (
+                "reschedule_show_slots",
+                prompt,
+                {
+                    "original_appointment_id": str(original.id),
+                    "presented_slots": presented,
+                    "retry_count": 0,
+                    "last_intent": "RESCHEDULE",
+                },
+            )
+
         intent = await self._detect_intent(
             contact=contact, message=message, history=history, context=context
         )
@@ -247,14 +284,14 @@ class ConversationService:
                 )
             appt = appointments[0]
             slot = await self._get_slot(appt.slot_id, session=session)
-            when_text = (
-                self._ai.generate_confirmation(
-                    {"start_time": slot.start_time}, contact.timezone
-                )
-                if slot is not None
-                else "your appointment"
+            when_text = "your appointment"
+            if slot is not None:
+                presented = self._serialize_presented_slots([slot], contact.timezone)
+                when_text = str(presented[0].get("display", "your appointment"))
+            prompt = (
+                f"I found your appointment at {when_text}. "
+                "Reply YES to confirm cancellation or NO to keep it."
             )
-            prompt = f"I found {when_text}. Reply YES to confirm cancellation or NO to keep it."
             return (
                 "confirming_cancel",
                 prompt,
@@ -351,6 +388,34 @@ class ConversationService:
                 context=context,
                 history=history,
                 session=session,
+            )
+        if self._is_rejecting_slots_message(message, intent):
+            exclude_ids = [
+                uuid.UUID(str(slot["slot_id"]))
+                for slot in presented
+                if slot.get("slot_id")
+            ]
+            alternatives = await self._scheduling.get_fresh_alternatives(
+                exclude_slot_ids=exclude_ids,
+                limit=5,
+            )
+            if not alternatives:
+                return (
+                    "idle",
+                    "No problem. I don't have different times right now. Reply BOOK anytime and I'll check again.",
+                    {"retry_count": 0, "last_intent": "DENY"},
+                )
+            fresh_presented = self._serialize_presented_slots(alternatives, contact.timezone)
+            return (
+                "showing_slots",
+                "No problem. Here are some other times:\n"
+                + self._ai.generate_slot_presentation(fresh_presented, contact.timezone),
+                {
+                    **context,
+                    "presented_slots": fresh_presented,
+                    "retry_count": 0,
+                    "last_intent": "DENY",
+                },
             )
 
         selected_slot_id = await self._ai.parse_slot_selection(
@@ -494,11 +559,17 @@ class ConversationService:
             contact=contact, message=message, history=history, context=context
         )
         appointment_id = context.get("pending_appointment_id")
-        if intent.intent != "CONFIRM":
+        if intent.intent == "DENY":
             return (
                 "idle",
                 "OK, your appointment is still on the books.",
                 {"retry_count": 0, "last_intent": "DENY"},
+            )
+        if intent.intent not in {"CONFIRM", "CANCEL"}:
+            return (
+                "confirming_cancel",
+                "Please reply YES to cancel or NO to keep your appointment.",
+                context,
             )
         if not appointment_id:
             return (
@@ -532,6 +603,12 @@ class ConversationService:
                 context=context,
                 history=history,
                 session=session,
+            )
+        if self._is_rejecting_slots_message(message, intent):
+            return (
+                "idle",
+                "No problem. Your current appointment stays as-is. Reply RESCHEDULE anytime to try again.",
+                {"retry_count": 0, "last_intent": "DENY"},
             )
 
         presented = list(context.get("presented_slots", []))
@@ -767,6 +844,26 @@ class ConversationService:
             if str(slot.get("slot_id")) == str(selected_slot_id):
                 return str(slot.get("display", f"slot {slot.get('index', '')}"))
         return "that selected time"
+
+    @staticmethod
+    def _is_rejecting_slots_message(message: str, intent: IntentResult) -> bool:
+        if intent.intent == "DENY":
+            return True
+        lowered = (message or "").strip().lower()
+        rejection_phrases = (
+            "those times don't work",
+            "these times don't work",
+            "none",
+            "neither",
+            "don't want",
+            "do not want",
+            "not work",
+            "another time",
+            "different time",
+            "something else",
+            "none of those",
+        )
+        return any(phrase in lowered for phrase in rejection_phrases)
 
     # ──────────────────────────────────────────────────────────────────
     # Database helpers — use provided session or open standalone

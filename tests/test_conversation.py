@@ -356,6 +356,29 @@ async def test_full_cancel_flow(service_bundle) -> None:
 
 
 @pytest.mark.asyncio
+async def test_cancel_keyword_confirms_when_already_confirming_cancel(service_bundle) -> None:
+    service, _, _, scheduling, _, states, create_contact = service_bundle
+    phone = "+15554449999"
+    contact = create_contact(phone, status="opted_in")
+    slot = next(iter(scheduling.slots.values()))
+    slot.is_available = False
+    appt = SimpleNamespace(
+        id=uuid.uuid4(),
+        contact_id=contact.id,
+        slot_id=slot.id,
+        status="confirmed",
+        booked_at=datetime.now(timezone.utc),
+        rescheduled_from_id=None,
+    )
+    scheduling.appointments[appt.id] = appt
+
+    await service.process_inbound_message(phone, "cancel", "SM6a")
+    assert states[contact.id].current_state == "confirming_cancel"
+    await service.process_inbound_message(phone, "cancel", "SM6b")
+    assert scheduling.appointments[appt.id].status == "cancelled"
+
+
+@pytest.mark.asyncio
 async def test_full_reschedule_flow(service_bundle) -> None:
     service, _, _, scheduling, _, states, create_contact = service_bundle
     phone = "+15555550000"
@@ -394,6 +417,30 @@ async def test_full_reschedule_flow(service_bundle) -> None:
 
 
 @pytest.mark.asyncio
+async def test_reschedule_rejection_keeps_existing_appointment(service_bundle) -> None:
+    service, _, sms, scheduling, _, states, create_contact = service_bundle
+    phone = "+15555558888"
+    contact = create_contact(phone, status="opted_in")
+    old_slot = next(iter(scheduling.slots.values()))
+    old_slot.is_available = False
+    appt = SimpleNamespace(
+        id=uuid.uuid4(),
+        contact_id=contact.id,
+        slot_id=old_slot.id,
+        status="confirmed",
+        booked_at=datetime.now(timezone.utc),
+        rescheduled_from_id=None,
+    )
+    scheduling.appointments[appt.id] = appt
+
+    await service.process_inbound_message(phone, "reschedule", "SM8a")
+    assert states[contact.id].current_state == "reschedule_show_slots"
+    await service.process_inbound_message(phone, "I don't want it", "SM8b")
+    assert states[contact.id].current_state == "idle"
+    assert "stays as-is" in sms.sent[-1]["body"]
+
+
+@pytest.mark.asyncio
 async def test_staleness_recovery_returns_to_showing_slots(service_bundle) -> None:
     service, _, sms, scheduling, _, states, create_contact = service_bundle
     phone = "+15556660000"
@@ -408,6 +455,27 @@ async def test_staleness_recovery_returns_to_showing_slots(service_bundle) -> No
     state = states[contact.id]
     assert state.current_state == "showing_slots"
     assert "just booked by someone else" in sms.sent[-1]["body"].lower()
+
+
+@pytest.mark.asyncio
+async def test_showing_slots_rejection_offers_alternatives(service_bundle) -> None:
+    service, _, sms, scheduling, _, states, create_contact = service_bundle
+    phone = "+15556661111"
+    contact = create_contact(phone, status="opted_in")
+    now = datetime.now(timezone.utc)
+    for idx in range(4, 8):
+        new_id = uuid.uuid4()
+        scheduling.slots[new_id] = SimpleNamespace(
+            id=new_id,
+            start_time=now + timedelta(hours=idx),
+            is_available=True,
+        )
+
+    await service.process_inbound_message(phone, "book", "SM11a")
+    assert states[contact.id].current_state == "showing_slots"
+    await service.process_inbound_message(phone, "Those times don't work for me", "SM11b")
+    assert states[contact.id].current_state == "showing_slots"
+    assert "other times" in sms.sent[-1]["body"].lower()
 
 
 @pytest.mark.asyncio

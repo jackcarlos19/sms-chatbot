@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections import defaultdict
+from contextlib import AsyncExitStack
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -127,20 +128,27 @@ class SchedulingService:
         appointment_id: uuid.UUID,
         new_slot_id: uuid.UUID,
     ) -> Appointment:
-        lock_keys = sorted([str(appointment_id), str(new_slot_id)])
-        async with self._slot_locks[lock_keys[0]]:
-            async with self._slot_locks[lock_keys[1]]:
-                async with self._session_factory() as session:
-                    async with session.begin():
-                        appointment_query: Select[tuple[Appointment]] = (
-                            select(Appointment)
-                            .where(Appointment.id == appointment_id)
-                            .with_for_update()
-                        )
-                        appointment_result = await session.execute(appointment_query)
-                        old_appointment = appointment_result.scalar_one_or_none()
-                        if old_appointment is None:
-                            raise ValueError("Appointment not found.")
+        # Lock appointment first to read a stable old slot id.
+        async with self._slot_locks[str(appointment_id)]:
+            async with self._session_factory() as session:
+                async with session.begin():
+                    appointment_query: Select[tuple[Appointment]] = (
+                        select(Appointment)
+                        .where(Appointment.id == appointment_id)
+                        .with_for_update()
+                    )
+                    appointment_result = await session.execute(appointment_query)
+                    old_appointment = appointment_result.scalar_one_or_none()
+                    if old_appointment is None:
+                        raise ValueError("Appointment not found.")
+
+                    # Ensure deterministic lock ordering for in-process guards.
+                    slot_lock_keys = sorted(
+                        [str(old_appointment.slot_id), str(new_slot_id)]
+                    )
+                    async with AsyncExitStack() as stack:
+                        for key in slot_lock_keys:
+                            await stack.enter_async_context(self._slot_locks[key])
 
                         old_slot_query: Select[tuple[AvailabilitySlot]] = (
                             select(AvailabilitySlot)

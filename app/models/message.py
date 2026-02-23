@@ -20,6 +20,9 @@ class Message(Base):
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
     )
+    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id")
+    )
     contact_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id")
     )
@@ -50,4 +53,5 @@ class Message(Base):
         Index("idx_messages_contact", "contact_id", text("created_at DESC")),
         Index("idx_messages_sms_sid", "sms_sid"),
         Index("idx_messages_campaign", "campaign_id"),
+        Index("idx_messages_tenant", "tenant_id"),
     )

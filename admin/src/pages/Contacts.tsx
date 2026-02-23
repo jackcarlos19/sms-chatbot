@@ -103,7 +103,7 @@ export default function Contacts() {
                 type="text"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search by phone number..."
+                placeholder="Search by phone number or name..."
                 className="max-w-md bg-background"
               />
             </div>

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy import DateTime, Index, String, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,9 @@ class Contact(Base):
         primary_key=True,
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
+    )
+    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id")
     )
     phone_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     first_name: Mapped[Optional[str]] = mapped_column(String(100))
@@ -50,6 +53,7 @@ class Contact(Base):
     )
 
     __table_args__ = (
+        Index("idx_contacts_tenant", "tenant_id"),
         Index("idx_contacts_phone", "phone_number"),
         Index("idx_contacts_opt_in", "opt_in_status"),
     )

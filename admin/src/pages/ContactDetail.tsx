@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, type Appointment, type ContactDetail as ContactDetailType, type Message } from '../api'
+import {
+  api,
+  type Appointment,
+  type AuditEvent,
+  type ContactDetail as ContactDetailType,
+  type Message,
+} from '../api'
 import { displayName, formatDate } from '../utils'
+import { Button } from '../components/ui/Button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
+import { Input } from '../components/ui/Input'
 
 function statusColor(status: string): string {
   if (status === 'delivered') return 'text-green-600 dark:text-green-400'
@@ -25,6 +34,14 @@ export default function ContactDetail() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
+  const [formState, setFormState] = useState({
+    first_name: '',
+    last_name: '',
+    timezone: '',
+    opt_in_status: 'opted_in',
+  })
   const bottomRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -32,13 +49,21 @@ export default function ContactDetail() {
       if (!id) return
       try {
         setError('')
-        const [contactData, messagesData, appointmentData] = await Promise.all([
+        const [contactData, messagesData, appointmentData, auditData] = await Promise.all([
           api.getContact(id),
           api.getMessages(id),
           api.getContactAppointments(id),
+          api.getAuditEvents('contact', id),
         ])
         setContact(contactData)
         setMessages(messagesData)
+        setAuditEvents(auditData)
+        setFormState({
+          first_name: contactData.first_name || '',
+          last_name: contactData.last_name || '',
+          timezone: contactData.timezone || '',
+          opt_in_status: contactData.opt_in_status || 'opted_in',
+        })
         setAppointments(
           [...appointmentData].sort(
             (a, b) => new Date(b.booked_at).getTime() - new Date(a.booked_at).getTime(),
@@ -54,6 +79,30 @@ export default function ContactDetail() {
   }, [id])
 
   const orderedMessages = useMemo(() => [...messages].reverse(), [messages])
+
+  const onSaveContact = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!id || !contact) return
+    setSaving(true)
+    try {
+      const updated = await api.updateContact(id, {
+        first_name: formState.first_name || null,
+        last_name: formState.last_name || null,
+        timezone: formState.timezone,
+        opt_in_status: formState.opt_in_status,
+      })
+      setContact({
+        ...contact,
+        ...updated,
+      })
+      const auditData = await api.getAuditEvents('contact', id)
+      setAuditEvents(auditData)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save contact')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -160,6 +209,56 @@ export default function ContactDetail() {
         <div className="space-y-6">
           <Card>
             <CardHeader className="pb-3">
+              <CardTitle className="text-base">Edit Contact</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-3" onSubmit={onSaveContact}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input
+                    type="text"
+                    placeholder="First name"
+                    value={formState.first_name}
+                    onChange={(event) =>
+                      setFormState((prev) => ({ ...prev, first_name: event.target.value }))
+                    }
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Last name"
+                    value={formState.last_name}
+                    onChange={(event) =>
+                      setFormState((prev) => ({ ...prev, last_name: event.target.value }))
+                    }
+                  />
+                </div>
+                <Input
+                  type="text"
+                  placeholder="Timezone (e.g. America/New_York)"
+                  value={formState.timezone}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, timezone: event.target.value }))
+                  }
+                />
+                <select
+                  value={formState.opt_in_status}
+                  onChange={(event) =>
+                    setFormState((prev) => ({ ...prev, opt_in_status: event.target.value }))
+                  }
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="opted_in">Opted in</option>
+                  <option value="opted_out">Opted out</option>
+                  <option value="pending">Pending</option>
+                </select>
+                <Button type="submit" size="sm" disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Contact'}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
               <CardTitle className="text-base">Current State</CardTitle>
             </CardHeader>
             <CardContent>
@@ -197,6 +296,30 @@ export default function ContactDetail() {
                           Cancelled: {formatDate(appointment.cancelled_at)}
                         </p>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Audit Trail</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {auditEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No admin actions recorded yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {auditEvents.slice(0, 10).map((event) => (
+                    <div key={event.id} className="rounded border border-border px-3 py-2">
+                      <p className="text-xs font-medium text-foreground">
+                        {event.action} by {event.actor_username}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {formatDate(event.created_at)}
+                      </p>
                     </div>
                   ))}
                 </div>

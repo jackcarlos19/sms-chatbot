@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, time
 from typing import Optional
 
-from sqlalchemy import DateTime, Integer, String, Text, Time, func, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, Time, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,9 @@ class Campaign(Base):
         primary_key=True,
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
+    )
+    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id")
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     message_template: Mapped[str] = mapped_column(Text, nullable=False)
@@ -45,3 +48,5 @@ class Campaign(Base):
 
     messages = relationship("Message", back_populates="campaign")
     recipients = relationship("CampaignRecipient", back_populates="campaign")
+
+    __table_args__ = (Index("idx_campaigns_tenant", "tenant_id"),)

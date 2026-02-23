@@ -20,6 +20,9 @@ class Appointment(Base):
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
     )
+    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id")
+    )
     contact_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False
     )
@@ -60,4 +63,5 @@ class Appointment(Base):
             postgresql_where=(status.in_(["confirmed", "rescheduled"])),
         ),
         Index("idx_appointments_contact", "contact_id", "status"),
+        Index("idx_appointments_tenant", "tenant_id"),
     )

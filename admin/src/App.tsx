@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom'
 import { api } from './api'
 import Appointments from './pages/Appointments'
+import AppointmentDetailPage from './pages/AppointmentDetail'
+import AdminUsers from './pages/AdminUsers'
 import Campaigns from './pages/Campaigns'
 import ContactDetail from './pages/ContactDetail'
 import Contacts from './pages/Contacts'
@@ -10,6 +12,8 @@ import Conversations from './pages/Conversations'
 import Dashboard from './pages/Dashboard'
 import Simulator from './pages/Simulator'
 import Slots from './pages/Slots'
+import Waitlist from './pages/Waitlist'
+import Workflows from './pages/Workflows'
 import { Icons } from './components/ui/Icons'
 import { Button } from './components/ui/Button'
 import { Input } from './components/ui/Input'
@@ -56,14 +60,18 @@ const navItems: NavItem[] = [
   { to: '/', icon: <Icons.Dashboard className="h-5 w-5" />, label: 'Dashboard' },
   { to: '/contacts', icon: <Icons.Contacts className="h-5 w-5" />, label: 'Contacts' },
   { to: '/appointments', icon: <Icons.Appointments className="h-5 w-5" />, label: 'Appointments' },
+  { to: '/waitlist', icon: <Icons.Waitlist className="h-5 w-5" />, label: 'Waitlist' },
+  { to: '/workflows', icon: <Icons.Workflows className="h-5 w-5" />, label: 'Workflows' },
   { to: '/conversations', icon: <Icons.Conversations className="h-5 w-5" />, label: 'Conversations' },
   { to: '/campaigns', icon: <Icons.Campaigns className="h-5 w-5" />, label: 'Campaigns' },
+  { to: '/admin-users', icon: <Icons.Security className="h-5 w-5" />, label: 'Admin Users' },
   { to: '/simulator', icon: <Icons.Simulator className="h-5 w-5" />, label: 'Simulator' },
   { to: '/slots', icon: <Icons.Slots className="h-5 w-5" />, label: 'Slots' },
 ]
 
 function pageTitle(pathname: string): string {
   if (pathname.startsWith('/contacts/')) return 'Contact Detail'
+  if (pathname.startsWith('/appointments/')) return 'Appointment Detail'
   const match = navItems.find((item) => item.to === pathname)
   return match?.label ?? 'SMS Chatbot Admin'
 }
@@ -275,8 +283,12 @@ function AppShell() {
                 <Route path="/contacts" element={<Contacts />} />
                 <Route path="/contacts/:id" element={<ContactDetail />} />
                 <Route path="/appointments" element={<Appointments />} />
+                <Route path="/appointments/:id" element={<AppointmentDetailPage />} />
+                <Route path="/waitlist" element={<Waitlist />} />
+                <Route path="/workflows" element={<Workflows />} />
                 <Route path="/conversations" element={<Conversations />} />
                 <Route path="/campaigns" element={<Campaigns />} />
+                <Route path="/admin-users" element={<AdminUsers />} />
                 <Route path="/simulator" element={<Simulator />} />
                 <Route path="/slots" element={<Slots />} />
               </Routes>

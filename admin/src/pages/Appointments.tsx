@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, type AppointmentFull } from '../api'
 import { formatDate } from '../utils'
 import { Card, CardContent } from '../components/ui/Card'
@@ -32,8 +32,13 @@ function getBadgeVariant(status: string): "success" | "destructive" | "warning" 
 }
 
 export default function Appointments() {
+  const navigate = useNavigate()
   const [rows, setRows] = useState<AppointmentFull[]>([])
   const [statusFilter, setStatusFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [viewMode, setViewMode] = useState<'table' | 'calendar'>('table')
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
@@ -43,7 +48,14 @@ export default function Appointments() {
     try {
       setError('')
       const status = selectedStatus === 'all' ? undefined : selectedStatus
-      const response = await api.getAllAppointments(PAGE_SIZE, nextOffset, status)
+      const response = await api.getAllAppointmentsFiltered({
+        limit: PAGE_SIZE,
+        offset: nextOffset,
+        status,
+        search: search.trim() || undefined,
+        date_from: dateFrom ? new Date(dateFrom).toISOString() : undefined,
+        date_to: dateTo ? new Date(dateTo).toISOString() : undefined,
+      })
       setHasMore(response.has_more)
       setOffset(nextOffset + response.data.length)
       if (reset) {
@@ -61,7 +73,7 @@ export default function Appointments() {
   useEffect(() => {
     loadRows(0, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [search, dateFrom, dateTo])
 
   const onStatusChange = async (value: string) => {
     setStatusFilter(value)
@@ -96,6 +108,12 @@ export default function Appointments() {
       <Card>
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by contact name or phone"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-[260px]"
+            />
             <select
               value={statusFilter}
               onChange={(event) => onStatusChange(event.target.value)}
@@ -106,6 +124,26 @@ export default function Appointments() {
               <option value="cancelled">Cancelled</option>
               <option value="rescheduled">Rescheduled</option>
             </select>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+              className="h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+            <div className="flex gap-2">
+              <Button variant={viewMode === 'table' ? 'primary' : 'secondary'} size="sm" onClick={() => setViewMode('table')}>
+                Table
+              </Button>
+              <Button variant={viewMode === 'calendar' ? 'primary' : 'secondary'} size="sm" onClick={() => setViewMode('calendar')}>
+                Calendar
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -116,7 +154,7 @@ export default function Appointments() {
             <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
               <p className="text-sm font-medium">No appointments found</p>
             </div>
-          ) : (
+          ) : viewMode === 'table' ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -130,7 +168,11 @@ export default function Appointments() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {rows.map((appointment) => (
-                    <tr key={appointment.id} className="transition-colors hover:bg-muted/50">
+                    <tr
+                      key={appointment.id}
+                      className="cursor-pointer transition-colors hover:bg-muted/50"
+                      onClick={() => navigate(`/appointments/${appointment.id}`)}
+                    >
                       <td className="whitespace-nowrap px-6 py-4">
                         <Link to={`/contacts/${appointment.contact_id}`} className="font-medium text-foreground hover:underline">
                           {appointment.contact_name || appointment.contact_phone}
@@ -153,6 +195,26 @@ export default function Appointments() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+              {rows.map((appointment) => (
+                <button
+                  key={appointment.id}
+                  type="button"
+                  onClick={() => navigate(`/appointments/${appointment.id}`)}
+                  className="rounded-lg border border-border p-4 text-left transition-colors hover:bg-muted/50"
+                >
+                  <p className="text-sm font-semibold text-foreground">
+                    {appointment.contact_name || appointment.contact_phone}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{appointment.contact_phone}</p>
+                  <p className="mt-3 text-sm text-foreground">{formatSlot(appointment.slot_start)}</p>
+                  <div className="mt-2">
+                    <Badge variant={getBadgeVariant(appointment.status)}>{appointment.status}</Badge>
+                  </div>
+                </button>
+              ))}
             </div>
           )}
         </CardContent>

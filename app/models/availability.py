@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, func, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,6 +19,9 @@ class AvailabilitySlot(Base):
         primary_key=True,
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
+    )
+    tenant_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id")
     )
     provider_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
     start_time: Mapped[datetime] = mapped_column(
@@ -48,4 +51,5 @@ class AvailabilitySlot(Base):
             "start_time",
             postgresql_where=text("is_available = TRUE"),
         ),
+        Index("idx_availability_tenant", "tenant_id"),
     )

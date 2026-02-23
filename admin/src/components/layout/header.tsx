@@ -1,9 +1,18 @@
 import * as React from 'react'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { SidebarTrigger } from './sidebar'
 import { Separator } from '../ui/Separator'
 import { Icons } from '../ui/Icons'
+import { Button } from '../ui/Button'
+import { Avatar, AvatarFallback } from '../ui/Avatar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/DropdownMenu'
 import { useTheme } from './theme-provider'
+import { api } from '../../api'
 
 export function Header({
   title,
@@ -16,14 +25,22 @@ export function Header({
   backTo?: string
   backLabel?: string
 }) {
+  const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const [healthy, setHealthy] = React.useState<boolean | null>(null)
+
+  const handleLogout = React.useCallback(async () => {
+    try {
+      await api.logout()
+    } finally {
+      navigate({ to: '/sign-in' })
+    }
+  }, [navigate])
 
   React.useEffect(() => {
     let mounted = true
     const check = async () => {
       try {
-        const { api } = await import('../../api')
         await api.getHealth()
         if (mounted) setHealthy(true)
       } catch {
@@ -83,6 +100,22 @@ export function Header({
         >
           {theme === 'dark' ? <Icons.Sun className="h-5 w-5" /> : <Icons.Moon className="h-5 w-5" />}
         </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="relative h-9 w-9 rounded-full p-0">
+              <Avatar className="h-9 w-9">
+                <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                  A
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={handleLogout}>
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )

@@ -32,7 +32,7 @@ import {
 } from '../../components/ui/Select'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { api } from '../../api'
-import type { AppointmentDetail as AppointmentDetailType, Slot } from '../../api'
+import type { AppointmentDetail as AppointmentDetailType, Slot, AuditEvent } from '../../api'
 import { appointmentCancelSchema, appointmentRescheduleSchema, appointmentNotesSchema } from '../../lib/schemas'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -64,6 +64,7 @@ function AppointmentDetailPage() {
   const appointmentId = params.appointmentId as string
   const [appointment, setAppointment] = React.useState<AppointmentDetailType | null>(null)
   const [slots, setSlots] = React.useState<Slot[]>([])
+  const [auditEvents, setAuditEvents] = React.useState<AuditEvent[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [cancelOpen, setCancelOpen] = React.useState(false)
@@ -87,6 +88,18 @@ function AppointmentDetailPage() {
   React.useEffect(() => {
     api.getSlots(14).then(setSlots).catch(() => setSlots([]))
   }, [])
+
+  const fetchAudit = React.useCallback(() => {
+    if (!appointmentId) return
+    api
+      .getAuditEvents('appointment', appointmentId)
+      .then(setAuditEvents)
+      .catch(() => setAuditEvents([]))
+  }, [appointmentId])
+
+  React.useEffect(() => {
+    fetchAudit()
+  }, [fetchAudit])
 
   const title = appointment
     ? `${appointment.contact_name || appointment.contact_phone} – ${formatDate(appointment.slot_start)}`
@@ -181,8 +194,41 @@ function AppointmentDetailPage() {
                 <InternalNotesForm
                   appointmentId={appointmentId}
                   initialNotes={appointment.notes ?? ''}
-                  onSuccess={fetchAppointment}
+                  onSuccess={() => {
+                    fetchAppointment()
+                    fetchAudit()
+                  }}
                 />
+              </CardContent>
+            </Card>
+
+            {/* Audit Trail */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Audit Trail</CardTitle>
+                <CardDescription>History of actions on this appointment</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {auditEvents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No audit events yet.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {auditEvents.map((event) => (
+                      <li
+                        key={event.id}
+                        className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-l-2 border-border pl-3 py-1"
+                      >
+                        <span className="font-medium">{event.action}</span>
+                        <span className="text-muted-foreground text-sm">
+                          {event.actor_username}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {formatDate(event.created_at)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </CardContent>
             </Card>
 
@@ -201,6 +247,7 @@ function AppointmentDetailPage() {
                       onSuccess={() => {
                         setRescheduleOpen(false)
                         fetchAppointment()
+                        fetchAudit()
                       }}
                       onCancel={() => setRescheduleOpen(false)}
                     />
@@ -218,6 +265,7 @@ function AppointmentDetailPage() {
                       onSuccess={() => {
                         setCancelOpen(false)
                         fetchAppointment()
+                        fetchAudit()
                       }}
                       onCancel={() => setCancelOpen(false)}
                     />

@@ -3,6 +3,7 @@ import { Link, useLocation } from '@tanstack/react-router'
 import { Button } from '../ui/Button'
 import { SheetContent, SheetProvider } from '../ui/Sheet'
 import { Icons } from '../ui/Icons'
+import { api } from '../../api'
 
 const SIDEBAR_COOKIE = 'sidebar_state'
 
@@ -132,7 +133,6 @@ export function SidebarContent() {
 
 export function SidebarFooter() {
   const logout = async () => {
-    const { api } = await import('../../api')
     await api.logout()
     window.location.reload()
   }
@@ -195,7 +195,6 @@ export function AppSidebarWithSheet() {
               type="button"
               className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
               onClick={async () => {
-                const { api } = await import('../../api')
                 await api.logout()
                 window.location.reload()
               }}

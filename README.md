@@ -140,3 +140,34 @@ Examples:
 - Logs are structured JSON and mask phone numbers.
 - Scheduling uses transactional row locks to avoid double booking.
 - Campaign workers re-check opt-in status immediately before send.
+
+## Admin Dashboard
+
+Access the admin dashboard at `/admin` after starting the application.
+
+### Features
+- **Dashboard** — Live stats, upcoming appointments, active conversations
+- **Contacts** — Browse all contacts, view conversation history, appointments
+- **Appointments** — All appointments with status filtering
+- **Conversations** — Real-time conversation state monitor
+- **Campaigns** — Create, schedule, and manage SMS campaigns
+- **Simulator** — Test the SMS chatbot without a phone number
+- **Slots** — View weekly appointment availability
+
+### Development
+```bash
+# Start the backend
+docker compose up -d
+
+# Start the admin dev server (hot reload, API proxied to :8000)
+cd admin
+npm install
+npm run dev
+# Open http://localhost:5173/admin
+```
+
+### Production
+The admin frontend is automatically built into the Docker image via multi-stage build. Access at `http://your-host/admin`.
+
+### Authentication
+Enter your `ADMIN_API_KEY` (from `.env`) at the login screen.

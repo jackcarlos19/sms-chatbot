@@ -49,13 +49,26 @@ export default function Simulator() {
     try {
       const response = await api.simulate(phone, textToSend)
       setConversationState(response.conversation_state || 'idle')
-      const botMessages: ChatMessage[] = (response.responses || []).map((body) => ({
+      const responses = response.responses || []
+      const botMessages: ChatMessage[] = responses.map((body) => ({
         id: crypto.randomUUID(),
         role: 'bot',
         body,
         ts: nowIso(),
       }))
-      setMessages((prev) => [...prev, ...botMessages])
+      if (botMessages.length === 0) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'system',
+            body: 'No response returned from simulator.',
+            ts: nowIso(),
+          },
+        ])
+      } else {
+        setMessages((prev) => [...prev, ...botMessages])
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Simulator request failed'
       setMessages((prev) => [

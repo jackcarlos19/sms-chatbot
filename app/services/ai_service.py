@@ -62,12 +62,56 @@ class AIService:
         context_section = self._build_context_section(
             available_slots, current_appointment
         )
+        state_instructions = {
+            "idle": (
+                "User is starting fresh. Detect: BOOK (any scheduling intent), "
+                "RESCHEDULE, CANCEL, or QUESTION."
+            ),
+            "showing_slots": (
+                "User sees numbered time slots. Detect: SELECT_SLOT (they pick one), "
+                "BOOK (want different times), CANCEL/RESCHEDULE (changed mind)."
+            ),
+            "confirming_booking": (
+                "User was asked 'Reply YES to confirm [time]'. "
+                "ANY affirmative (yes/yep/y/yeah/sure/ok/confirm/👍/sounds good/do it/book it/perfect) -> CONFIRM. "
+                "ANY negative (no/nope/nah/different/change) -> DENY. "
+                "STRONGLY bias toward CONFIRM for ambiguous affirmatives."
+            ),
+            "confirming_cancel": (
+                "User was asked to confirm cancellation. "
+                "Affirmative -> CONFIRM. Negative -> DENY."
+            ),
+            "reschedule_show_slots": (
+                "User is picking a new time for rescheduling. "
+                "Same as showing_slots."
+            ),
+            "confirming_reschedule": (
+                "User was asked to confirm rescheduled time. "
+                "Affirmative -> CONFIRM. Negative -> DENY."
+            ),
+            "awaiting_info": (
+                "We asked for more info. Detect the underlying intent from their reply."
+            ),
+        }
+        state_instruction = state_instructions.get(
+            conversation_state, state_instructions["idle"]
+        )
         system_prompt = (
-            f"You are a friendly SMS scheduling assistant for {self._settings.business_name}. "
-            "Keep responses concise under 320 chars when possible and max 480 chars. "
-            f"Current datetime: {datetime.now(timezone.utc).isoformat()} ({contact_timezone}). "
-            f"Conversation state: {conversation_state}. {context_section} "
-            "Use the tool to return structured output."
+            f"You are a concise SMS scheduling assistant for {self._settings.business_name}.\n\n"
+            "HARD RULES:\n"
+            "- Responses MUST be under 300 characters. This is SMS.\n"
+            "- NEVER invent details (prices, locations, hours, services). "
+            "If asked, respond: 'Please contact us for that info.'\n"
+            "- NEVER write poems, stories, jokes, or off-topic content. "
+            "Redirect: 'I help with scheduling! Want to book an appointment?'\n"
+            "- NEVER ask more than one question per message.\n"
+            "- When showing time slots, always use numbered format.\n\n"
+            f"CURRENT STATE: {conversation_state}\n"
+            f"INSTRUCTION: {state_instruction}\n\n"
+            f"Datetime: {datetime.now(timezone.utc).isoformat()} "
+            f"(contact tz: {contact_timezone}).\n"
+            f"{context_section}\n"
+            "Return your response via the submit_intent tool."
         )
 
         history = self._prepare_history(conversation_history)
@@ -125,12 +169,10 @@ class AIService:
                 "ai_detect_intent_failed",
                 extra={"error": str(exc), "user_message": message},
             )
-            return IntentResult(
-                intent="UNCLEAR",
-                confidence=0.0,
-                extracted_data={},
-                response_text=FALLBACK_TEXT,
-                needs_info=[],
+            return self._heuristic_intent_result(
+                message=message,
+                conversation_state=conversation_state,
+                available_slots=available_slots or [],
             )
 
     async def parse_slot_selection(
@@ -204,7 +246,12 @@ class AIService:
                 messages=[
                     {
                         "role": "system",
-                        "content": "Map user selection to a slot id or return null if unclear.",
+                        "content": (
+                            "Map the user's message to one of the presented slot IDs. "
+                            "If the user says a number (e.g. '2'), map to the slot at that index. "
+                            "If the user describes a time/day, find the closest match. "
+                            "Return null ONLY if truly unclear. Never invent slot IDs."
+                        ),
                     },
                     {
                         "role": "user",
@@ -322,22 +369,75 @@ class AIService:
 
     def _parse_intent_response(self, response: Any) -> IntentResult:
         tool_calls = response.choices[0].message.tool_calls or []
-        payload: dict[str, Any]
+        payload: dict[str, Any] = {}
 
         if tool_calls:
-            payload = json.loads(tool_calls[0].function.arguments or "{}")
-        else:
-            content = response.choices[0].message.content or "{}"
-            payload = json.loads(content)
+            raw_args = tool_calls[0].function.arguments or "{}"
+            try:
+                payload = json.loads(raw_args)
+            except json.JSONDecodeError:
+                logger.warning("tool_call_json_parse_failed", extra={"raw": raw_args[:500]})
 
-        intent = str(payload.get("intent", "UNCLEAR")).upper()
+        if not payload:
+            content = response.choices[0].message.content or ""
+            try:
+                match = re.search(r"\{[^{}]*\"intent\"[^{}]*\}", content, re.DOTALL)
+                if match:
+                    payload = json.loads(match.group(0))
+                elif content.strip().startswith("{"):
+                    payload = json.loads(content)
+            except (json.JSONDecodeError, ValueError):
+                logger.warning(
+                    "content_json_parse_failed", extra={"content": content[:300]}
+                )
+
+        if not payload:
+            return IntentResult(
+                intent="UNCLEAR",
+                confidence=0.0,
+                extracted_data={},
+                response_text=FALLBACK_TEXT,
+                needs_info=[],
+            )
+
+        raw_intent = str(payload.get("intent", "UNCLEAR")).strip().upper()
+        intent_aliases = {
+            "CONFIRM_YES": "CONFIRM",
+            "CONFIRMATION": "CONFIRM",
+            "YES": "CONFIRM",
+            "AFFIRM": "CONFIRM",
+            "DENY_NO": "DENY",
+            "NO": "DENY",
+            "REJECTION": "DENY",
+            "BOOKING": "BOOK",
+            "SCHEDULE": "BOOK",
+            "SELECT": "SELECT_SLOT",
+            "SLOT_SELECTION": "SELECT_SLOT",
+            "ASK": "QUESTION",
+            "FAQ": "QUESTION",
+            "INFO": "QUESTION",
+            "UNKNOWN": "UNCLEAR",
+            "NONE": "UNCLEAR",
+        }
+        intent = intent_aliases.get(raw_intent, raw_intent)
         if intent not in INTENTS:
+            logger.warning(
+                "unknown_intent", extra={"raw": raw_intent, "resolved": "UNCLEAR"}
+            )
             intent = "UNCLEAR"
 
         confidence = float(payload.get("confidence", 0.0))
+        if confidence > 1.0:
+            confidence = min(confidence / 100.0, 1.0)
+        confidence = max(0.0, min(1.0, confidence))
+
         extracted_data = payload.get("extracted_data") or {}
+        if not isinstance(extracted_data, dict):
+            extracted_data = {}
         response_text = self._truncate(str(payload.get("response_text", FALLBACK_TEXT)))
         needs_info = payload.get("needs_info") or []
+        if not isinstance(needs_info, list):
+            needs_info = []
 
         return IntentResult(
             intent=intent,
@@ -368,3 +468,70 @@ class AIService:
             return dt.astimezone(ZoneInfo(timezone_name))
         except Exception:  # noqa: BLE001
             return dt.astimezone(timezone.utc)
+
+    @staticmethod
+    def _contains_any(text: str, terms: list[str]) -> bool:
+        return any(term in text for term in terms)
+
+    def _heuristic_intent_result(
+        self,
+        message: str,
+        conversation_state: str,
+        available_slots: list[dict[str, Any]],
+    ) -> IntentResult:
+        text = (message or "").strip().lower()
+        affirmative = [
+            "yes",
+            "y",
+            "yep",
+            "yeah",
+            "sure",
+            "ok",
+            "okay",
+            "confirm",
+            "sounds good",
+            "do it",
+            "book it",
+            "perfect",
+            "👍",
+        ]
+        negative = ["no", "nope", "nah", "different", "change"]
+
+        if conversation_state in {
+            "confirming_booking",
+            "confirming_cancel",
+            "confirming_reschedule",
+        }:
+            if self._contains_any(text, affirmative):
+                return IntentResult("CONFIRM", 0.8, {}, "Confirmed.", [])
+            if self._contains_any(text, negative):
+                return IntentResult("DENY", 0.8, {}, "No problem.", [])
+
+        if available_slots and re.search(r"\b\d+\b", text):
+            return IntentResult("SELECT_SLOT", 0.75, {}, "Selecting a slot.", [])
+
+        if self._contains_any(text, ["reschedule", "move", "change time"]):
+            return IntentResult("RESCHEDULE", 0.75, {}, "Let's reschedule.", [])
+        if "cancel" in text:
+            return IntentResult("CANCEL", 0.75, {}, "Let's cancel.", [])
+        if self._contains_any(text, ["book", "appointment", "schedule"]):
+            return IntentResult("BOOK", 0.75, {}, "Let's get you booked.", [])
+        if self._contains_any(text, ["poem", "story", "joke"]):
+            return IntentResult(
+                "QUESTION",
+                0.7,
+                {},
+                "I help with scheduling. Want to book an appointment?",
+                [],
+            )
+        if self._contains_any(text, ["how much", "price", "cost", "charge"]):
+            return IntentResult(
+                "QUESTION",
+                0.7,
+                {},
+                "Please contact us for that info.",
+                [],
+            )
+        if "?" in text:
+            return IntentResult("QUESTION", 0.65, {}, "Please contact us for that info.", [])
+        return IntentResult("UNCLEAR", 0.0, {}, FALLBACK_TEXT, [])

@@ -51,8 +51,12 @@ class FakeAIService:
         return IntentResult("QUESTION", 0.7, {}, "Could you share more details?", [])
 
     async def parse_slot_selection(
-        self, message: str, presented_slots: list[dict[str, Any]]
+        self,
+        message: str,
+        presented_slots: list[dict[str, Any]],
+        timezone_name: str = "UTC",
     ) -> str | None:
+        _ = timezone_name
         text = (message or "").strip().lower()
         if not presented_slots:
             return None
@@ -256,8 +260,11 @@ def service_bundle(monkeypatch):
         return state
 
     async def fake_get_contact_appointments(
-        contact_id: uuid.UUID, status_filter: list[str] | None = None
+        contact_id: uuid.UUID,
+        status_filter: list[str] | None = None,
+        session: Any | None = None,
     ):
+        _ = session
         statuses = set(status_filter or ["confirmed"])
         return [
             appt
@@ -265,7 +272,8 @@ def service_bundle(monkeypatch):
             if appt.contact_id == contact_id and appt.status in statuses
         ]
 
-    async def fake_get_slot(slot_id: uuid.UUID):
+    async def fake_get_slot(slot_id: uuid.UUID, session: Any | None = None):
+        _ = session
         return scheduling.slots.get(slot_id)
 
     monkeypatch.setattr(service, "_get_contact", fake_get_contact)
@@ -415,3 +423,40 @@ async def test_mid_flow_intent_change_to_cancel(service_bundle) -> None:
     state = states[contact.id]
     assert state.current_state != "confirming_booking"
     assert "cancel" in sms.sent[-1]["body"].lower()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_state_resets_expired_state() -> None:
+    service = ConversationService(
+        ai_service=FakeAIService(),
+        scheduling_service=FakeSchedulingService(slots={}),
+        sms_service=FakeSMSService(),
+        redis_client=None,
+    )
+
+    expired_state = SimpleNamespace(
+        contact_id=uuid.uuid4(),
+        current_state="showing_slots",
+        context={"history": [{"role": "user", "content": "book"}]},
+        last_message_at=datetime.now(timezone.utc) - timedelta(hours=3),
+        expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+
+    class _FakeResult:
+        def scalar_one_or_none(self):
+            return expired_state
+
+    class _FakeSession:
+        async def execute(self, _query):
+            return _FakeResult()
+
+        def add(self, _obj: object) -> None:
+            return None
+
+        async def flush(self) -> None:
+            return None
+
+    resolved = await service._get_or_create_state(_FakeSession(), expired_state.contact_id)
+    assert resolved.current_state == "idle"
+    assert resolved.context == {}
+    assert resolved.expires_at is None

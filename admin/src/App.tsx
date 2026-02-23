@@ -13,6 +13,7 @@ import Slots from './pages/Slots'
 import { Icons } from './components/ui/Icons'
 import { Button } from './components/ui/Button'
 import { Input } from './components/ui/Input'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const ThemeContext = React.createContext<{ theme: 'light' | 'dark'; toggleTheme: () => void }>({
   theme: 'light',
@@ -268,16 +269,18 @@ function AppShell() {
         {/* Page Content */}
         <main className="flex-1 p-4 md:p-8">
           <div className="mx-auto max-w-6xl w-full">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/contacts" element={<Contacts />} />
-              <Route path="/contacts/:id" element={<ContactDetail />} />
-              <Route path="/appointments" element={<Appointments />} />
-              <Route path="/conversations" element={<Conversations />} />
-              <Route path="/campaigns" element={<Campaigns />} />
-              <Route path="/simulator" element={<Simulator />} />
-              <Route path="/slots" element={<Slots />} />
-            </Routes>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/contacts/:id" element={<ContactDetail />} />
+                <Route path="/appointments" element={<Appointments />} />
+                <Route path="/conversations" element={<Conversations />} />
+                <Route path="/campaigns" element={<Campaigns />} />
+                <Route path="/simulator" element={<Simulator />} />
+                <Route path="/slots" element={<Slots />} />
+              </Routes>
+            </ErrorBoundary>
           </div>
         </main>
       </div>

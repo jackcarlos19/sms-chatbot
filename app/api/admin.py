@@ -16,6 +16,7 @@ from sqlalchemy import and_, case, func, select
 
 from app.api.deps import get_ai_service, get_redis_client, get_scheduling_service
 from app.config import get_settings
+from app.core.rate_limit import rate_limit
 from app.database import AsyncSessionFactory
 from app.core.masking import mask_phone_number
 from app.models.appointment import Appointment
@@ -28,7 +29,6 @@ from app.schemas import (
     AppointmentResponse,
     CampaignCreateResponse,
     CampaignResponse,
-    ContactResponse,
     MessageResponse,
 )
 from app.services.conversation_service import ConversationService
@@ -137,7 +137,10 @@ class AdminLoginRequest(BaseModel):
 
 
 @router.post("/admin/auth/login")
-async def admin_login(payload: AdminLoginRequest, response: Response) -> dict:
+async def admin_login(
+    payload: AdminLoginRequest, request: Request, response: Response
+) -> dict:
+    rate_limit(request, "login", max_requests=5, window=60)
     settings = get_settings()
     # Prefer dedicated admin username/password; fallback to legacy ADMIN_API_KEY.
     valid_username = payload.username == settings.admin_username
@@ -337,30 +340,59 @@ async def dashboard_stats() -> dict:
 
 @router.get(
     "/contacts",
-    response_model=list[ContactResponse],
     dependencies=[Depends(verify_admin_access)],
 )
-async def list_contacts(limit: int = 100, offset: int = 0) -> list[dict]:
+async def list_contacts(
+    limit: int = 50,
+    offset: int = 0,
+    search: str = "",
+    status: str = "",
+) -> dict:
     async with AsyncSessionFactory() as session:
+        base_query = select(Contact)
+        count_query = select(func.count(Contact.id))
+
+        if search:
+            like = f"%{search}%"
+            full_name = func.concat(
+                func.coalesce(Contact.first_name, ""),
+                " ",
+                func.coalesce(Contact.last_name, ""),
+            )
+            search_filter = Contact.phone_number.ilike(like) | full_name.ilike(like)
+            base_query = base_query.where(search_filter)
+            count_query = count_query.where(search_filter)
+
+        if status and status != "all":
+            base_query = base_query.where(Contact.opt_in_status == status)
+            count_query = count_query.where(Contact.opt_in_status == status)
+
+        total = (await session.execute(count_query)).scalar_one()
         result = await session.execute(
-            select(Contact)
+            base_query
             .order_by(Contact.created_at.desc())
             .offset(offset)
             .limit(limit)
         )
         contacts = result.scalars().all()
-        return [
-            {
-                "id": str(contact.id),
-                "phone_number": contact.phone_number,
-                "first_name": contact.first_name,
-                "last_name": contact.last_name,
-                "timezone": contact.timezone,
-                "opt_in_status": contact.opt_in_status,
-                "created_at": contact.created_at.isoformat(),
-            }
-            for contact in contacts
-        ]
+        return {
+            "data": [
+                {
+                    "id": str(contact.id),
+                    "phone_number": contact.phone_number,
+                    "first_name": contact.first_name,
+                    "last_name": contact.last_name,
+                    "timezone": contact.timezone,
+                    "opt_in_status": contact.opt_in_status,
+                    "created_at": contact.created_at.isoformat(),
+                }
+                for contact in contacts
+            ],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(contacts) < total,
+        }
 
 
 @router.get("/contacts/{contact_id}", dependencies=[Depends(verify_admin_access)])
@@ -399,11 +431,11 @@ async def get_contact(contact_id: str) -> dict:
 
 @router.get(
     "/campaigns",
-    response_model=list[CampaignResponse],
     dependencies=[Depends(verify_admin_access)],
 )
-async def list_campaigns(limit: int = 100, offset: int = 0) -> list[dict]:
+async def list_campaigns(limit: int = 50, offset: int = 0) -> dict:
     async with AsyncSessionFactory() as session:
+        total = (await session.execute(select(func.count(Campaign.id)))).scalar_one()
         result = await session.execute(
             select(Campaign)
             .order_by(Campaign.created_at.desc())
@@ -411,23 +443,29 @@ async def list_campaigns(limit: int = 100, offset: int = 0) -> list[dict]:
             .limit(limit)
         )
         campaigns = result.scalars().all()
-        return [
-            {
-                "id": str(campaign.id),
-                "name": campaign.name,
-                "status": campaign.status,
-                "scheduled_at": (
-                    campaign.scheduled_at.isoformat() if campaign.scheduled_at else None
-                ),
-                "total_recipients": campaign.total_recipients,
-                "sent_count": campaign.sent_count,
-                "delivered_count": campaign.delivered_count,
-                "failed_count": campaign.failed_count,
-                "reply_count": campaign.reply_count,
-                "created_at": campaign.created_at.isoformat(),
-            }
-            for campaign in campaigns
-        ]
+        return {
+            "data": [
+                {
+                    "id": str(campaign.id),
+                    "name": campaign.name,
+                    "status": campaign.status,
+                    "scheduled_at": (
+                        campaign.scheduled_at.isoformat() if campaign.scheduled_at else None
+                    ),
+                    "total_recipients": campaign.total_recipients,
+                    "sent_count": campaign.sent_count,
+                    "delivered_count": campaign.delivered_count,
+                    "failed_count": campaign.failed_count,
+                    "reply_count": campaign.reply_count,
+                    "created_at": campaign.created_at.isoformat(),
+                }
+                for campaign in campaigns
+            ],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(campaigns) < total,
+        }
 
 
 @router.post(
@@ -489,31 +527,40 @@ async def update_campaign(campaign_id: str, payload: CampaignPatchRequest) -> di
 @router.get("/appointments/all", dependencies=[Depends(verify_admin_access)])
 async def list_all_appointments(
     limit: int = 50, offset: int = 0, status: Optional[str] = None
-) -> list[dict]:
+) -> dict:
     async with AsyncSessionFactory() as session:
         query = (
             select(Appointment, Contact, AvailabilitySlot)
             .join(Contact, Appointment.contact_id == Contact.id)
             .join(AvailabilitySlot, Appointment.slot_id == AvailabilitySlot.id)
         )
+        count_query = select(func.count(Appointment.id))
         if status:
             query = query.where(Appointment.status == status)
+            count_query = count_query.where(Appointment.status == status)
+        total = (await session.execute(count_query)).scalar_one()
         query = query.order_by(AvailabilitySlot.start_time.asc()).offset(offset).limit(limit)
         result = await session.execute(query)
         rows = result.all()
-        return [
-            {
-                "id": str(appt.id),
-                "contact_id": str(appt.contact_id),
-                "contact_phone": contact.phone_number,
-                "contact_name": _display_name(contact),
-                "slot_start": slot.start_time.isoformat(),
-                "slot_end": slot.end_time.isoformat(),
-                "status": appt.status,
-                "booked_at": appt.booked_at.isoformat(),
-            }
-            for appt, contact, slot in rows
-        ]
+        return {
+            "data": [
+                {
+                    "id": str(appt.id),
+                    "contact_id": str(appt.contact_id),
+                    "contact_phone": contact.phone_number,
+                    "contact_name": _display_name(contact),
+                    "slot_start": slot.start_time.isoformat(),
+                    "slot_end": slot.end_time.isoformat(),
+                    "status": appt.status,
+                    "booked_at": appt.booked_at.isoformat(),
+                }
+                for appt, contact, slot in rows
+            ],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(rows) < total,
+        }
 
 
 @router.get(
@@ -549,8 +596,9 @@ async def list_appointments(contact_id: str) -> list[dict]:
 
 
 @router.get("/conversations", dependencies=[Depends(verify_admin_access)])
-async def list_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
+async def list_conversations(limit: int = 50, offset: int = 0) -> dict:
     async with AsyncSessionFactory() as session:
+        total = (await session.execute(select(func.count(ConversationState.id)))).scalar_one()
         result = await session.execute(
             select(ConversationState, Contact)
             .join(Contact, ConversationState.contact_id == Contact.id)
@@ -559,20 +607,26 @@ async def list_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
             .limit(limit)
         )
         rows = result.all()
-        return [
-            {
-                "id": str(state.id),
-                "contact_id": str(state.contact_id),
-                "contact_phone": contact.phone_number,
-                "contact_name": _display_name(contact),
-                "current_state": state.current_state,
-                "last_message_at": state.last_message_at.isoformat()
-                if state.last_message_at
-                else None,
-                "updated_at": state.updated_at.isoformat(),
-            }
-            for state, contact in rows
-        ]
+        return {
+            "data": [
+                {
+                    "id": str(state.id),
+                    "contact_id": str(state.contact_id),
+                    "contact_phone": contact.phone_number,
+                    "contact_name": _display_name(contact),
+                    "current_state": state.current_state,
+                    "last_message_at": state.last_message_at.isoformat()
+                    if state.last_message_at
+                    else None,
+                    "updated_at": state.updated_at.isoformat(),
+                }
+                for state, contact in rows
+            ],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(rows) < total,
+        }
 
 
 @router.get("/slots", dependencies=[Depends(verify_admin_access)])
@@ -638,7 +692,8 @@ async def list_messages(contact_id: str) -> list[dict]:
     "/simulate/inbound",
     dependencies=[Depends(verify_admin_access)],
 )
-async def simulate_inbound(payload: SimulateRequest) -> dict:
+async def simulate_inbound(payload: SimulateRequest, request: Request) -> dict:
+    rate_limit(request, "simulate", max_requests=30, window=60)
     started_at = monotonic()
     logger.info(
         "simulator_inbound_started",
@@ -653,6 +708,7 @@ async def simulate_inbound(payload: SimulateRequest) -> dict:
         sms_service=fake_sms,
         redis_client=get_redis_client(),
     )
+    simulator_sms_sid = f"SIM_{uuid.uuid4().hex[:16]}"
 
     async with AsyncSessionFactory() as session:
         contact = await fake_sms._get_or_create_contact(session, payload.phone_number)
@@ -661,7 +717,7 @@ async def simulate_inbound(payload: SimulateRequest) -> dict:
             direction="inbound",
             body=payload.message,
             status="received",
-            sms_sid=f"SIM_{uuid.uuid4().hex[:16]}",
+            sms_sid=simulator_sms_sid,
         )
         session.add(inbound)
         await session.commit()
@@ -669,7 +725,7 @@ async def simulate_inbound(payload: SimulateRequest) -> dict:
     await conv_service.process_inbound_message(
         phone_number=payload.phone_number,
         body=payload.message,
-        sms_sid=f"SIM_{uuid.uuid4().hex[:16]}",
+        sms_sid=simulator_sms_sid,
     )
 
     async with AsyncSessionFactory() as session:

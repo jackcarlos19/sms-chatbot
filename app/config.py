@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     business_name: str = Field(default="Acme Services", alias="BUSINESS_NAME")
     admin_api_key: str = Field(default="change-admin-key", alias="ADMIN_API_KEY")
     admin_username: str = Field(default="admin", alias="ADMIN_USERNAME")
-    admin_password: str = Field(default="change-admin-password", alias="ADMIN_PASSWORD")
+    admin_password: str = Field(default="change-this-admin-password", alias="ADMIN_PASSWORD")
     support_phone_number: str = Field(
         default="+10000000000",
         alias="SUPPORT_PHONE_NUMBER",
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     )
     ai_max_tokens: int = Field(default=300, alias="AI_MAX_TOKENS")
     admin_session_secret: str = Field(
-        default="change-admin-session-secret",
+        default="change-this-session-secret",
         alias="ADMIN_SESSION_SECRET",
     )
     admin_session_max_age_seconds: int = Field(

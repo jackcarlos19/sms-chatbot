@@ -127,6 +127,7 @@ class ConversationService:
             context = dict(state.context or {})
             history = list(context.get("history", []))
             current_state = state.current_state or "idle"
+            context["current_state"] = current_state
             logger.info(
                 "conversation_state_loaded",
                 phone=mask_phone_number(phone_number),
@@ -143,6 +144,7 @@ class ConversationService:
                 message=normalized_body,
                 context=context,
                 history=history,
+                session=session,
             )
             logger.info(
                 "conversation_state_transition",
@@ -162,6 +164,7 @@ class ConversationService:
                 assistant_message=response_text,
             )
             next_context["history"] = updated_history
+            next_context["current_state"] = next_state
             state.current_state = next_state
             state.context = next_context
             state.last_message_at = datetime.now(timezone.utc)
@@ -191,6 +194,7 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
         handlers = {
             "idle": self._handle_idle,
@@ -203,7 +207,11 @@ class ConversationService:
         }
         handler = handlers.get(current_state, self._handle_idle)
         return await handler(
-            contact=contact, message=message, context=context, history=history
+            contact=contact,
+            message=message,
+            context=context,
+            history=history,
+            session=session,
         )
 
     # ──────────────────────────────────────────────────────────────────
@@ -216,6 +224,7 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
         intent = await self._detect_intent(
             contact=contact, message=message, history=history, context=context
@@ -226,7 +235,9 @@ class ConversationService:
 
         if intent.intent == "CANCEL":
             appointments = await self._get_contact_appointments(
-                contact.id, status_filter=["confirmed"]
+                contact.id,
+                status_filter=["confirmed"],
+                session=session,
             )
             if not appointments:
                 return (
@@ -235,7 +246,7 @@ class ConversationService:
                     {"retry_count": 0},
                 )
             appt = appointments[0]
-            slot = await self._get_slot(appt.slot_id)
+            slot = await self._get_slot(appt.slot_id, session=session)
             when_text = (
                 self._ai.generate_confirmation(
                     {"start_time": slot.start_time}, contact.timezone
@@ -256,7 +267,9 @@ class ConversationService:
 
         if intent.intent == "RESCHEDULE":
             appointments = await self._get_contact_appointments(
-                contact.id, status_filter=["confirmed"]
+                contact.id,
+                status_filter=["confirmed"],
+                session=session,
             )
             if not appointments:
                 return (
@@ -323,7 +336,9 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
+        _ = session
         presented = list(context.get("presented_slots", []))
         intent = await self._detect_intent(
             contact=contact, message=message, history=history, context=context
@@ -331,11 +346,17 @@ class ConversationService:
 
         if intent.intent in {"CANCEL", "RESCHEDULE"}:
             return await self._handle_idle(
-                contact=contact, message=message, context=context, history=history
+                contact=contact,
+                message=message,
+                context=context,
+                history=history,
+                session=session,
             )
 
         selected_slot_id = await self._ai.parse_slot_selection(
-            message=message, presented_slots=presented
+            message=message,
+            presented_slots=presented,
+            timezone_name=contact.timezone,
         )
         if selected_slot_id is None:
             retry_count = int(context.get("retry_count", 0)) + 1
@@ -381,6 +402,7 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
         intent = await self._detect_intent(
             contact=contact, message=message, history=history, context=context
@@ -388,7 +410,11 @@ class ConversationService:
 
         if intent.intent == "CANCEL":
             return await self._handle_idle(
-                contact=contact, message=message, context=context, history=history
+                contact=contact,
+                message=message,
+                context=context,
+                history=history,
+                session=session,
             )
 
         if intent.intent == "DENY":
@@ -422,7 +448,7 @@ class ConversationService:
                 contact_id=contact.id,
                 slot_id=uuid.UUID(str(selected_slot)),
             )
-            slot = await self._get_slot(appointment.slot_id)
+            slot = await self._get_slot(appointment.slot_id, session=session)
             confirmation = self._ai.generate_confirmation(
                 {"start_time": slot.start_time if slot else None},
                 contact.timezone,
@@ -461,7 +487,9 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
+        _ = session
         intent = await self._detect_intent(
             contact=contact, message=message, history=history, context=context
         )
@@ -492,18 +520,25 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
         intent = await self._detect_intent(
             contact=contact, message=message, history=history, context=context
         )
         if intent.intent == "CANCEL":
             return await self._handle_idle(
-                contact=contact, message=message, context=context, history=history
+                contact=contact,
+                message=message,
+                context=context,
+                history=history,
+                session=session,
             )
 
         presented = list(context.get("presented_slots", []))
         selected_slot_id = await self._ai.parse_slot_selection(
-            message=message, presented_slots=presented
+            message=message,
+            presented_slots=presented,
+            timezone_name=contact.timezone,
         )
         if selected_slot_id is None:
             retry_count = int(context.get("retry_count", 0)) + 1
@@ -547,6 +582,7 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
         intent = await self._detect_intent(
             contact=contact, message=message, history=history, context=context
@@ -578,7 +614,7 @@ class ConversationService:
                 appointment_id=uuid.UUID(str(original_id)),
                 new_slot_id=uuid.UUID(str(selected_slot_id)),
             )
-            slot = await self._get_slot(replacement.slot_id)
+            slot = await self._get_slot(replacement.slot_id, session=session)
             confirmation = self._ai.generate_confirmation(
                 {"start_time": slot.start_time if slot else None},
                 contact.timezone,
@@ -615,9 +651,14 @@ class ConversationService:
         message: str,
         context: dict[str, Any],
         history: list[dict[str, str]],
+        session: AsyncSession,
     ) -> tuple[str, str, dict[str, Any]]:
         return await self._handle_idle(
-            contact=contact, message=message, context=context, history=history
+            contact=contact,
+            message=message,
+            context=context,
+            history=history,
+            session=session,
         )
 
     # ──────────────────────────────────────────────────────────────────
@@ -669,7 +710,7 @@ class ConversationService:
             conversation_history=history,
             available_slots=available_slots,
             current_appointment=None,
-            conversation_state=context.get("last_state", "idle"),
+            conversation_state=context.get("current_state", "idle"),
             contact_timezone=contact.timezone,
         )
         logger.info(
@@ -747,6 +788,16 @@ class ConversationService:
         )
         state = result.scalar_one_or_none()
         if state is not None:
+            now = datetime.now(timezone.utc)
+            if state.expires_at is not None and state.expires_at < now:
+                logger.info(
+                    "conversation_state_expired_reset",
+                    contact_id=str(contact_id),
+                    previous_state=state.current_state,
+                )
+                state.current_state = "idle"
+                state.context = {}
+                state.expires_at = None
             return state
         state = ConversationState(
             contact_id=contact_id, current_state="idle", context={}
@@ -759,9 +810,11 @@ class ConversationService:
         self,
         contact_id: uuid.UUID,
         status_filter: list[str] | None = None,
+        session: AsyncSession | None = None,
     ) -> list[Appointment]:
         statuses = status_filter or ["confirmed"]
-        async with AsyncSessionFactory() as session:
+
+        async def _query(s: AsyncSession) -> list[Appointment]:
             query = (
                 select(Appointment)
                 .where(
@@ -770,12 +823,26 @@ class ConversationService:
                 )
                 .order_by(Appointment.booked_at.desc())
             )
-            result = await session.execute(query)
-            return result.scalars().all()
+            result = await s.execute(query)
+            return list(result.scalars().all())
 
-    async def _get_slot(self, slot_id: uuid.UUID) -> AvailabilitySlot | None:
-        async with AsyncSessionFactory() as session:
-            result = await session.execute(
+        if session is not None:
+            return await _query(session)
+
+        async with AsyncSessionFactory() as s:
+            return await _query(s)
+
+    async def _get_slot(
+        self, slot_id: uuid.UUID, session: AsyncSession | None = None
+    ) -> AvailabilitySlot | None:
+        async def _query(s: AsyncSession) -> AvailabilitySlot | None:
+            result = await s.execute(
                 select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
             )
             return result.scalar_one_or_none()
+
+        if session is not None:
+            return await _query(session)
+
+        async with AsyncSessionFactory() as s:
+            return await _query(s)

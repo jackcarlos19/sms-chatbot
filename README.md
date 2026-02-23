@@ -81,7 +81,8 @@ Populate at least:
 ### 2) Start dependencies and app
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+docker compose up -d
+docker compose exec app alembic upgrade head
 ```
 
 ### 3) Verify health
@@ -117,7 +118,7 @@ python scripts/seed_availability.py
 3. Run quality checks:
    - `ruff check .`
    - `black .`
-   - `pytest`
+   - `pytest tests/ -x -q`
 4. Merge feature to `develop`, tag release milestone.
 5. Periodically merge `develop` to `main` for production-ready snapshots.
 
@@ -170,7 +171,7 @@ npm run dev
 The admin frontend is automatically built into the Docker image via multi-stage build. Access at `http://your-host/admin`.
 
 ### Authentication
-Enter your `ADMIN_API_KEY` (from `.env`) at the login screen.
+Use `ADMIN_USERNAME` and `ADMIN_PASSWORD` to sign in via `POST /api/admin/auth/login`.
 
 ## Production Deployment (VPS + Permanent Domain)
 
@@ -208,6 +209,7 @@ export DOMAIN=yourdomain.com
 ### 6) Verify
 - `https://yourdomain.com/api/health`
 - `https://yourdomain.com/admin`
+- `DOMAIN=yourdomain.com docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
 
 ## Admin Auth (Server Session)
 
@@ -217,3 +219,16 @@ Admin access now uses a server-side session cookie:
 - Session check: `GET /api/admin/auth/me`
 
 The backend still accepts `X-API-Key` for compatibility, but web UI auth should use session login.
+
+## Twilio Webhook Setup (Dev)
+
+Use ngrok to expose your local app to Twilio while developing:
+
+```bash
+docker compose up -d ngrok
+```
+
+Then set your Twilio webhook URL to:
+
+- `https://<your-ngrok-domain>/webhooks/sms/inbound`
+- Status callback: `https://<your-ngrok-domain>/webhooks/sms/status`

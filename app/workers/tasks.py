@@ -191,18 +191,11 @@ async def retry_failed_sends(ctx: dict) -> int:  # noqa: ARG001
                 await session.commit()
                 continue
             try:
-                # Send via Twilio but update THIS record, don't create a new one
-                import asyncio as _asyncio
-                from twilio.base.exceptions import TwilioRestException
-
-                twilio_message = await _asyncio.to_thread(
-                    sms_service._client.messages.create,
+                new_sid = await sms_service.retry_send(
                     body=msg.body,
-                    from_=sms_service._settings.twilio_phone_number,
                     to=contact.phone_number,
-                    status_callback=sms_service._settings.twilio_status_callback_url,
                 )
-                msg.sms_sid = twilio_message.sid
+                msg.sms_sid = new_sid
                 msg.status = "sent"
                 retried += 1
             except Exception as exc:  # noqa: BLE001

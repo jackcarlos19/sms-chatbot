@@ -120,6 +120,17 @@ class SMSService:
 
         raise RuntimeError("Failed to send message after retries")
 
+    async def retry_send(self, body: str, to: str) -> str:
+        """Retry sending via Twilio and return the new message SID."""
+        twilio_msg = await asyncio.to_thread(
+            self._client.messages.create,
+            body=body,
+            from_=self._settings.twilio_phone_number,
+            to=to,
+            status_callback=self._settings.twilio_status_callback_url,
+        )
+        return str(twilio_msg.sid)
+
     async def handle_inbound(
         self,
         from_number: str,

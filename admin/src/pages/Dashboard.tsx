@@ -37,8 +37,10 @@ export default function Dashboard() {
         api.getConversations(10, 0),
       ])
       setStats(statsData)
-      setAppointments(appointmentData)
-      setConversations(conversationData.filter((item) => item.current_state !== 'idle'))
+      setAppointments(appointmentData.data)
+      setConversations(
+        conversationData.data.filter((item: Conversation) => item.current_state !== 'idle'),
+      )
       setLastUpdated(new Date())
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load dashboard'

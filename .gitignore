@@ -16,6 +16,9 @@ env/
 # Environment files
 .env
 .env.local
+env
+*.env
+.env.*
 
 # Build artifacts
 build/

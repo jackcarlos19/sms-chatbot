@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
@@ -16,12 +17,49 @@ from app.config import get_settings
 from app.core.exceptions import SMSChatbotError
 from app.core.logging import configure_structured_logging
 from app.database import AsyncSessionFactory
+from app.database import engine
 from app.schemas import HealthResponse
 
 settings = get_settings()
 configure_structured_logging()
 log = structlog.get_logger(__name__)
-app = FastAPI(title="SMS Chatbot API")
+
+
+def _validate_production_secrets() -> None:
+    if settings.app_env not in ("production", "staging"):
+        return
+    insecure_defaults = {
+        "secret_key": "change-me-in-production",
+        "admin_api_key": "change-this-admin-key",
+        "admin_password": "change-this-admin-password",
+        "admin_session_secret": "change-this-session-secret",
+    }
+    for attr, default_val in insecure_defaults.items():
+        if getattr(settings, attr, None) == default_val:
+            raise RuntimeError(
+                f"FATAL: {attr.upper()} has its default value. "
+                "Set a real value in .env before running in production."
+            )
+
+
+_validate_production_secrets()
+
+
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    _ = app_instance
+    log.info("app_starting", env=settings.app_env)
+    yield
+    log.info("app_shutting_down")
+    try:
+        redis_client = get_redis_client()
+        await redis_client.aclose()
+    except Exception:  # noqa: BLE001
+        pass
+    await engine.dispose()
+
+
+app = FastAPI(title="SMS Chatbot API", lifespan=lifespan)
 app.include_router(webhooks_router)
 app.include_router(admin_router)
 
@@ -76,25 +114,32 @@ async def handle_chatbot_error(request: Request, exc: SMSChatbotError):
 async def health_check() -> HealthResponse:
     db_status = "error"
     redis_status = "error"
+    errors: dict[str, str] = {}
 
     try:
         async with AsyncSessionFactory() as session:
             await session.execute(text("SELECT 1"))
         db_status = "ok"
+    except Exception as exc:
+        errors["db"] = str(exc)
 
+    try:
         redis_client = get_redis_client()
         await redis_client.ping()
         redis_status = "ok"
     except Exception as exc:
+        errors["redis"] = str(exc)
+
+    if db_status != "ok" or redis_status != "ok":
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "red",
                 "db": db_status,
                 "redis": redis_status,
-                "error": str(exc),
+                "error": errors,
             },
-        ) from exc
+        )
 
     return HealthResponse(status="green", db=db_status, redis=redis_status)
 

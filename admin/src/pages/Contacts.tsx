@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Contact } from '../api'
 import { displayName, formatDate } from '../utils'
@@ -8,6 +8,15 @@ import { Input } from '../components/ui/Input'
 import { Button } from '../components/ui/Button'
 
 const PAGE_SIZE = 50
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay)
+    return () => window.clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
 
 function getStatusBadgeVariant(status: string): "success" | "destructive" | "warning" | "secondary" {
   if (status === 'opted_in') return 'success'
@@ -25,17 +34,23 @@ export default function Contacts() {
   const [hasMore, setHasMore] = useState(true)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
 
-  const loadContacts = async (nextOffset: number, reset = false) => {
+  const loadContacts = async (
+    nextOffset: number,
+    reset = false,
+    searchValue = debouncedSearch,
+    statusValue = status,
+  ) => {
     try {
       setError('')
-      const rows = await api.getContacts(PAGE_SIZE, nextOffset)
-      setHasMore(rows.length === PAGE_SIZE)
-      setOffset(nextOffset + rows.length)
+      const response = await api.getContacts(PAGE_SIZE, nextOffset, searchValue, statusValue)
+      setHasMore(response.has_more)
+      setOffset(nextOffset + response.data.length)
       if (reset) {
-        setContacts(rows)
+        setContacts(response.data)
       } else {
-        setContacts((prev) => [...prev, ...rows])
+        setContacts((prev) => [...prev, ...response.data])
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load contacts')
@@ -45,16 +60,10 @@ export default function Contacts() {
   }
 
   useEffect(() => {
+    setLoading(true)
     loadContacts(0, true)
-  }, [])
-
-  const filteredContacts = useMemo(() => {
-    return contacts.filter((contact) => {
-      const phoneMatch = contact.phone_number.toLowerCase().includes(search.toLowerCase())
-      const statusMatch = status === 'all' ? true : contact.opt_in_status === status
-      return phoneMatch && statusMatch
-    })
-  }, [contacts, search, status])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, status])
 
   if (loading) {
     return (
@@ -114,7 +123,7 @@ export default function Contacts() {
 
       <Card>
         <CardContent className="px-0 py-0">
-          {filteredContacts.length === 0 ? (
+          {contacts.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
               <p className="text-sm font-medium">No contacts found</p>
               <p className="text-xs mt-1">Try adjusting your filters</p>
@@ -132,11 +141,19 @@ export default function Contacts() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {filteredContacts.map((contact) => (
+                  {contacts.map((contact) => (
                     <tr
                       key={contact.id}
                       className="cursor-pointer transition-colors hover:bg-muted/50"
                       onClick={() => navigate(`/contacts/${contact.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          navigate(`/contacts/${contact.id}`)
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
                     >
                       <td className="whitespace-nowrap px-6 py-4 font-medium text-foreground">{contact.phone_number}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{displayName(contact)}</td>

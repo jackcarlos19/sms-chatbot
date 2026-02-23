@@ -27,8 +27,8 @@ export default function Campaigns() {
   const loadCampaigns = async () => {
     try {
       setError('')
-      const rows = await api.getCampaigns(100, 0)
-      setCampaigns(rows)
+      const response = await api.getCampaigns(100, 0)
+      setCampaigns(response.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load campaigns')
     } finally {
@@ -118,8 +118,15 @@ export default function Campaigns() {
               <div className="space-y-1">
                 <div className="flex justify-between">
                   <label className="text-sm font-medium text-foreground">Message Template</label>
-                  <span className="text-xs text-muted-foreground">Use {'{first_name}'}, {'{last_name}'}</span>
+                  <span
+                    className={`text-xs ${
+                      template.length > 320 ? 'font-semibold text-destructive' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {template.length}/320
+                  </span>
                 </div>
+                <p className="text-xs text-muted-foreground">Use {'{first_name}'}, {'{last_name}'}</p>
                 <textarea
                   value={template}
                   onChange={(event) => setTemplate(event.target.value)}

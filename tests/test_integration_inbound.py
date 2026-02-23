@@ -51,8 +51,12 @@ class FakeAIService:
         return IntentResult("QUESTION", 0.7, {}, "Could you share more details?", [])
 
     async def parse_slot_selection(
-        self, message: str, presented_slots: list[dict[str, Any]]
+        self,
+        message: str,
+        presented_slots: list[dict[str, Any]],
+        timezone_name: str = "UTC",
     ) -> str | None:
+        _ = timezone_name
         text = (message or "").strip().lower()
         if not presented_slots:
             return None
@@ -260,8 +264,11 @@ def integration_env(monkeypatch):
         return state
 
     async def fake_get_contact_appointments(
-        contact_id: uuid.UUID, status_filter: list[str] | None = None
+        contact_id: uuid.UUID,
+        status_filter: list[str] | None = None,
+        session: Any | None = None,
     ):
+        _ = session
         statuses = set(status_filter or ["confirmed"])
         return [
             appt
@@ -269,7 +276,8 @@ def integration_env(monkeypatch):
             if appt.contact_id == contact_id and appt.status in statuses
         ]
 
-    async def fake_get_slot(slot_id: uuid.UUID):
+    async def fake_get_slot(slot_id: uuid.UUID, session: Any | None = None):
+        _ = session
         return scheduling.slots.get(slot_id)
 
     monkeypatch.setattr(service, "_get_contact", fake_get_contact)

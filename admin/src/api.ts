@@ -166,6 +166,14 @@ export interface CampaignUpdateRequest {
   scheduled_at?: string
 }
 
+export interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  limit: number
+  offset: number
+  has_more: boolean
+}
+
 export const api = {
   login: (payload: AdminSessionLoginRequest) =>
     apiFetch<{ ok: boolean; username: string }>('/admin/auth/login', {
@@ -178,8 +186,12 @@ export const api = {
     }),
   me: () => apiFetch<AdminSessionStatus>('/admin/auth/me'),
   getDashboardStats: () => apiFetch<DashboardStats>('/dashboard/stats'),
-  getContacts: (limit = 100, offset = 0) =>
-    apiFetch<Contact[]>(`/contacts?limit=${limit}&offset=${offset}`),
+  getContacts: (limit = 50, offset = 0, search = '', status = '') => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+    if (search) params.set('search', search)
+    if (status && status !== 'all') params.set('status', status)
+    return apiFetch<PaginatedResponse<Contact>>(`/contacts?${params.toString()}`)
+  },
   getContact: (id: string) => apiFetch<ContactDetail>(`/contacts/${id}`),
   getAllAppointments: (limit = 50, offset = 0, status?: string) => {
     const params = new URLSearchParams({
@@ -187,15 +199,15 @@ export const api = {
       offset: String(offset),
     })
     if (status) params.set('status', status)
-    return apiFetch<AppointmentFull[]>(`/appointments/all?${params.toString()}`)
+    return apiFetch<PaginatedResponse<AppointmentFull>>(`/appointments/all?${params.toString()}`)
   },
   getContactAppointments: (contactId: string) =>
     apiFetch<Appointment[]>(`/appointments?contact_id=${contactId}`),
   getMessages: (contactId: string) => apiFetch<Message[]>(`/messages?contact_id=${contactId}`),
   getConversations: (limit = 50, offset = 0) =>
-    apiFetch<Conversation[]>(`/conversations?limit=${limit}&offset=${offset}`),
-  getCampaigns: (limit = 100, offset = 0) =>
-    apiFetch<Campaign[]>(`/campaigns?limit=${limit}&offset=${offset}`),
+    apiFetch<PaginatedResponse<Conversation>>(`/conversations?limit=${limit}&offset=${offset}`),
+  getCampaigns: (limit = 50, offset = 0) =>
+    apiFetch<PaginatedResponse<Campaign>>(`/campaigns?limit=${limit}&offset=${offset}`),
   createCampaign: (data: CampaignCreateRequest) =>
     apiFetch<CampaignCreateResponse>('/campaigns', {
       method: 'POST',

@@ -84,7 +84,7 @@ async def test_detect_intent_fallback_on_error() -> None:
     service = AIService(client=FakeClient(error=TimeoutError("timeout")))
 
     result = await service.detect_intent(
-        message="book",
+        message="blargh",
         conversation_history=[],
     )
 
@@ -150,3 +150,72 @@ def test_generate_slot_and_confirmation_text() -> None:
     assert "Here are some available times" in presentation
     assert "Reply with a number to book" in presentation
     assert "You're all set! Your appointment is confirmed for" in confirmation
+
+
+def test_parse_intent_alias_and_confidence_percentage() -> None:
+    response = _tool_response(
+        "submit_intent",
+        {
+            "intent": "CONFIRM_YES",
+            "confidence": 87,
+            "extracted_data": {},
+            "response_text": "Great, confirming now.",
+            "needs_info": [],
+        },
+    )
+    service = AIService(client=FakeClient(response=response))
+
+    result = service._parse_intent_response(response)
+    assert result.intent == "CONFIRM"
+    assert 0.86 <= result.confidence <= 0.88
+
+
+def test_parse_intent_falls_back_to_content_json() -> None:
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    tool_calls=[],
+                    content=json.dumps(
+                        {
+                            "intent": "DENY_NO",
+                            "confidence": 0.9,
+                            "extracted_data": {},
+                            "response_text": "No, thanks.",
+                            "needs_info": [],
+                        }
+                    ),
+                )
+            )
+        ]
+    )
+    service = AIService(client=FakeClient(response=response))
+
+    result = service._parse_intent_response(response)
+    assert result.intent == "DENY"
+    assert result.response_text == "No, thanks."
+
+
+def test_parse_intent_returns_unclear_on_invalid_payload() -> None:
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    tool_calls=[
+                        SimpleNamespace(
+                            function=SimpleNamespace(
+                                name="submit_intent",
+                                arguments="{bad-json",
+                            )
+                        )
+                    ],
+                    content="not-json",
+                )
+            )
+        ]
+    )
+    service = AIService(client=FakeClient(response=response))
+
+    result = service._parse_intent_response(response)
+    assert result.intent == "UNCLEAR"
+    assert result.confidence == 0.0

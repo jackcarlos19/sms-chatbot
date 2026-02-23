@@ -43,13 +43,13 @@ export default function Appointments() {
     try {
       setError('')
       const status = selectedStatus === 'all' ? undefined : selectedStatus
-      const data = await api.getAllAppointments(PAGE_SIZE, nextOffset, status)
-      setHasMore(data.length === PAGE_SIZE)
-      setOffset(nextOffset + data.length)
+      const response = await api.getAllAppointments(PAGE_SIZE, nextOffset, status)
+      setHasMore(response.has_more)
+      setOffset(nextOffset + response.data.length)
       if (reset) {
-        setRows(data)
+        setRows(response.data)
       } else {
-        setRows((prev) => [...prev, ...data])
+        setRows((prev) => [...prev, ...response.data])
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load appointments')

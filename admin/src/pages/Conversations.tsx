@@ -23,8 +23,8 @@ export default function Conversations() {
   const loadRows = async () => {
     try {
       setError('')
-      const data = await api.getConversations(100, 0)
-      setRows(data)
+      const response = await api.getConversations(100, 0)
+      setRows(response.data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load conversations')
     } finally {
@@ -102,6 +102,14 @@ export default function Conversations() {
                       key={row.id}
                       className="cursor-pointer transition-colors hover:bg-muted/50"
                       onClick={() => navigate(`/contacts/${row.contact_id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          navigate(`/contacts/${row.contact_id}`)
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
                     >
                       <td className="whitespace-nowrap px-6 py-4 font-medium text-foreground">{row.contact_phone}</td>
                       <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{row.contact_name}</td>

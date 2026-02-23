@@ -29,3 +29,7 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Docs and Cursor rules (local/reference only)
+docs/
+.cursorrules

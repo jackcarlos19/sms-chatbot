@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     )
 
     ngrok_authtoken: str = Field(default="", alias="NGROK_AUTHTOKEN")
+    cors_origins: str = Field(
+        default="",
+        alias="CORS_ORIGINS",
+        description="Comma-separated origins for admin CORS (e.g. https://your-ngrok.io)",
+    )
 
 
 @lru_cache

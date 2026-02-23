@@ -90,11 +90,13 @@ function AuthGate({ onAuthenticated }: { onAuthenticated: () => void }) {
       await api.login({ username, password })
       onAuthenticated()
     } catch (err) {
-      const message = err instanceof Error ? err.message : ''
+      const message = err instanceof Error ? err.message : String(err)
       if (message.includes('401')) {
         setError('Invalid credentials')
+      } else if (message.includes('Failed to fetch') || message.includes('NetworkError')) {
+        setError('Cannot reach server. Check that the app is running at this URL and try again.')
       } else {
-        setError('Cannot reach server')
+        setError(message || 'Cannot reach server')
       }
     } finally {
       setLoading(false)

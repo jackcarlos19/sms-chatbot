@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -60,6 +61,24 @@ async def lifespan(app_instance: FastAPI):
 
 
 app = FastAPI(title="SMS Chatbot API", lifespan=lifespan)
+
+# CORS so admin (same or different origin) can call the API with credentials
+_app_origins = [
+    "http://localhost:8000",
+    "http://localhost:5173",
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:5173",
+]
+if settings.cors_origins:
+    _app_origins = _app_origins + [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_app_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
 app.include_router(webhooks_router)
 app.include_router(admin_router)
 

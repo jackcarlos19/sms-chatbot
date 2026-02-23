@@ -2,16 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Conversation } from '../api'
 import { formatDate } from '../utils'
+import { Card, CardContent } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
 
-function stateBadgeClass(state: string): string {
-  if (state === 'idle') return 'bg-gray-100 text-gray-800'
-  if (state === 'greeting') return 'bg-blue-100 text-blue-800'
-  if (state === 'showing_slots') return 'bg-purple-100 text-purple-800'
-  if (state === 'confirming_booking') return 'bg-yellow-100 text-yellow-800'
-  if (state === 'confirmed') return 'bg-green-100 text-green-800'
-  if (state === 'cancelling') return 'bg-orange-100 text-orange-800'
-  if (state === 'rescheduling') return 'bg-yellow-100 text-yellow-800'
-  return 'bg-gray-100 text-gray-800'
+function getStateBadgeVariant(state: string) {
+  if (state === 'idle') return 'secondary'
+  if (state === 'confirmed') return 'success'
+  if (state === 'cancelling') return 'destructive'
+  return 'warning'
 }
 
 export default function Conversations() {
@@ -46,76 +45,81 @@ export default function Conversations() {
 
   if (loading) {
     return (
-      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
-        <div className="h-6 w-48 animate-pulse rounded bg-gray-200" />
-        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
-        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+      <div className="space-y-6">
+        <Card className="animate-pulse"><CardContent className="p-6 h-[400px]" /></Card>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Conversations</h1>
+      </div>
+
       {error && (
-        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={loadRows}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-          >
+        <div className="flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive">
+          <span className="text-sm font-medium">{error}</span>
+          <Button variant="danger" size="sm" onClick={loadRows}>
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
-      <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-        <input
-          type="checkbox"
-          checked={showIdle}
-          onChange={(event) => setShowIdle(event.target.checked)}
-        />
-        Show idle
-      </label>
+      <Card>
+        <CardContent className="p-4 sm:p-6 border-b border-border flex justify-between items-center">
+          <label className="inline-flex items-center gap-2 text-sm font-medium text-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showIdle}
+              onChange={(event) => setShowIdle(event.target.checked)}
+              className="rounded border-input text-primary focus:ring-ring h-4 w-4"
+            />
+            Show idle conversations
+          </label>
+        </CardContent>
 
-      {visibleRows.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
-          No conversations found
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs font-medium uppercase text-gray-500">
-                <th className="px-4 py-3">Contact</th>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">State</th>
-                <th className="px-4 py-3">Last Message</th>
-                <th className="px-4 py-3">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="cursor-pointer border-b border-gray-100 hover:bg-gray-50"
-                  onClick={() => navigate(`/contacts/${row.contact_id}`)}
-                >
-                  <td className="px-4 py-3">{row.contact_phone}</td>
-                  <td className="px-4 py-3">{row.contact_name}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${stateBadgeClass(row.current_state)}`}>
-                      {row.current_state}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{formatDate(row.last_message_at)}</td>
-                  <td className="px-4 py-3">{formatDate(row.updated_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        <CardContent className="px-0 py-0">
+          {visibleRows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+              <p className="text-sm font-medium">No conversations found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="px-6 py-4">Contact</th>
+                    <th className="px-6 py-4">Name</th>
+                    <th className="px-6 py-4">State</th>
+                    <th className="px-6 py-4">Last Message</th>
+                    <th className="px-6 py-4">Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {visibleRows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className="cursor-pointer transition-colors hover:bg-muted/50"
+                      onClick={() => navigate(`/contacts/${row.contact_id}`)}
+                    >
+                      <td className="whitespace-nowrap px-6 py-4 font-medium text-foreground">{row.contact_phone}</td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{row.contact_name}</td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Badge variant={getStateBadgeVariant(row.current_state) as any}>
+                          {row.current_state.replace('_', ' ')}
+                        </Badge>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{formatDate(row.last_message_at)}</td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{formatDate(row.updated_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

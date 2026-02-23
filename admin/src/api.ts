@@ -1,43 +1,20 @@
-const API_KEY_STORAGE = 'admin_api_key'
-
-export function getApiKey(): string {
-  return sessionStorage.getItem(API_KEY_STORAGE) ?? ''
-}
-
-export function setApiKey(apiKey: string): void {
-  sessionStorage.setItem(API_KEY_STORAGE, apiKey)
-}
-
-export function clearApiKey(): void {
-  sessionStorage.removeItem(API_KEY_STORAGE)
-}
-
-export function hasApiKey(): boolean {
-  return Boolean(getApiKey())
-}
-
-type ApiFetchOptions = RequestInit & { apiKeyOverride?: string }
+type ApiFetchOptions = RequestInit
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  const apiKey = options.apiKeyOverride ?? getApiKey()
   const headers = new Headers(options.headers ?? {})
 
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  if (apiKey) {
-    headers.set('X-API-Key', apiKey)
-  }
 
   const response = await fetch(`/api${normalizedPath}`, {
     ...options,
     headers,
+    credentials: 'include',
   })
 
-  if (response.status === 401 && !options.apiKeyOverride) {
-    clearApiKey()
-    window.location.reload()
+  if (response.status === 401) {
     throw new Error('401 Unauthorized')
   }
 
@@ -169,6 +146,15 @@ export interface SimulateResponse {
   context: Record<string, unknown>;
 }
 
+export interface AdminSessionLoginRequest {
+  username: string
+  password: string
+}
+
+export interface AdminSessionStatus {
+  authenticated: boolean
+}
+
 export interface CampaignCreateRequest {
   name: string
   message_template: string
@@ -181,6 +167,16 @@ export interface CampaignUpdateRequest {
 }
 
 export const api = {
+  login: (payload: AdminSessionLoginRequest) =>
+    apiFetch<{ ok: boolean; username: string }>('/admin/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  logout: () =>
+    apiFetch<{ ok: boolean }>('/admin/auth/logout', {
+      method: 'POST',
+    }),
+  me: () => apiFetch<AdminSessionStatus>('/admin/auth/me'),
   getDashboardStats: () => apiFetch<DashboardStats>('/dashboard/stats'),
   getContacts: (limit = 100, offset = 0) =>
     apiFetch<Contact[]>(`/contacts?limit=${limit}&offset=${offset}`),
@@ -211,8 +207,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getSlots: (daysAhead = 7) => apiFetch<Slot[]>(`/slots?days_ahead=${daysAhead}`),
-  getHealth: (apiKeyOverride?: string) =>
-    apiFetch<HealthStatus>('/health', { apiKeyOverride }),
+  getHealth: () => apiFetch<HealthStatus>('/health'),
   simulate: (phone: string, message: string) =>
     apiFetch<SimulateResponse>('/simulate/inbound', {
       method: 'POST',

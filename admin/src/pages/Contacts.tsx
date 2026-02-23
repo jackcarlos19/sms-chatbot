@@ -2,14 +2,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, type Contact } from '../api'
 import { displayName, formatDate } from '../utils'
+import { Card, CardContent } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
+import { Input } from '../components/ui/Input'
+import { Button } from '../components/ui/Button'
 
 const PAGE_SIZE = 50
 
-function statusBadge(status: string): string {
-  if (status === 'opted_in') return 'bg-green-100 text-green-800'
-  if (status === 'opted_out') return 'bg-red-100 text-red-800'
-  if (status === 'pending') return 'bg-yellow-100 text-yellow-800'
-  return 'bg-gray-100 text-gray-800'
+function getStatusBadgeVariant(status: string) {
+  if (status === 'opted_in') return 'success'
+  if (status === 'opted_out') return 'destructive'
+  if (status === 'pending') return 'warning'
+  return 'secondary'
 }
 
 export default function Contacts() {
@@ -54,96 +58,114 @@ export default function Contacts() {
 
   if (loading) {
     return (
-      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
-        <div className="h-6 w-40 animate-pulse rounded bg-gray-200" />
-        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
-        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+      <div className="space-y-6">
+        <Card className="animate-pulse">
+          <CardContent className="p-6">
+            <div className="h-10 w-full rounded bg-muted" />
+          </CardContent>
+        </Card>
+        <Card className="animate-pulse">
+          <CardContent className="p-6 h-[400px]" />
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => loadContacts(0, true)}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 md:flex-row">
-        <input
-          type="text"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by phone number..."
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 md:max-w-sm"
-        />
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 md:w-52"
-        >
-          <option value="all">All</option>
-          <option value="opted_in">Opted In</option>
-          <option value="opted_out">Opted Out</option>
-          <option value="pending">Pending</option>
-        </select>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Contacts</h1>
       </div>
 
-      {filteredContacts.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
-          No contacts found
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs font-medium uppercase text-gray-500">
-                <th className="px-4 py-3">Phone Number</th>
-                <th className="px-4 py-3">Name</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Timezone</th>
-                <th className="px-4 py-3">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredContacts.map((contact) => (
-                <tr
-                  key={contact.id}
-                  className="cursor-pointer border-b border-gray-100 hover:bg-gray-50"
-                  onClick={() => navigate(`/contacts/${contact.id}`)}
-                >
-                  <td className="px-4 py-3">{contact.phone_number}</td>
-                  <td className="px-4 py-3">{displayName(contact)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge(contact.opt_in_status)}`}>
-                      {contact.opt_in_status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{contact.timezone}</td>
-                  <td className="px-4 py-3">{formatDate(contact.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {error && (
+        <div className="flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive">
+          <span className="text-sm font-medium">{error}</span>
+          <Button variant="danger" size="sm" onClick={() => loadContacts(0, true)}>
+            Retry
+          </Button>
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => loadContacts(offset)}
-        disabled={!hasMore}
-        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        Load More
-      </button>
+      <Card>
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="flex-1">
+              <Input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by phone number..."
+                className="max-w-md bg-background"
+              />
+            </div>
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-[180px]"
+            >
+              <option value="all">All Statuses</option>
+              <option value="opted_in">Opted In</option>
+              <option value="opted_out">Opted Out</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="px-0 py-0">
+          {filteredContacts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+              <p className="text-sm font-medium">No contacts found</p>
+              <p className="text-xs mt-1">Try adjusting your filters</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="px-6 py-4">Phone Number</th>
+                    <th className="px-6 py-4">Name</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Timezone</th>
+                    <th className="px-6 py-4">Created</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredContacts.map((contact) => (
+                    <tr
+                      key={contact.id}
+                      className="cursor-pointer transition-colors hover:bg-muted/50"
+                      onClick={() => navigate(`/contacts/${contact.id}`)}
+                    >
+                      <td className="whitespace-nowrap px-6 py-4 font-medium text-foreground">{contact.phone_number}</td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{displayName(contact)}</td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Badge variant={getStatusBadgeVariant(contact.opt_in_status) as any}>
+                          {contact.opt_in_status.replace('_', ' ')}
+                        </Badge>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{contact.timezone}</td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{formatDate(contact.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-center">
+        <Button
+          variant="secondary"
+          onClick={() => loadContacts(offset)}
+          disabled={!hasMore}
+          className="w-full sm:w-auto"
+        >
+          Load More
+        </Button>
+      </div>
     </div>
   )
 }

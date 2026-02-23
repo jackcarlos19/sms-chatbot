@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type AppointmentFull } from '../api'
 import { formatDate } from '../utils'
+import { Card, CardContent } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
 
 const PAGE_SIZE = 50
 
@@ -21,11 +24,11 @@ function durationMinutes(startIso: string, endIso: string): number {
   return Math.max(0, Math.round((end - start) / 60000))
 }
 
-function badgeClass(status: string): string {
-  if (status === 'confirmed') return 'bg-green-100 text-green-800'
-  if (status === 'cancelled') return 'bg-red-100 text-red-800'
-  if (status === 'rescheduled') return 'bg-yellow-100 text-yellow-800'
-  return 'bg-gray-100 text-gray-800'
+function getBadgeVariant(status: string) {
+  if (status === 'confirmed') return 'success'
+  if (status === 'cancelled') return 'destructive'
+  if (status === 'rescheduled') return 'warning'
+  return 'secondary'
 }
 
 export default function Appointments() {
@@ -67,92 +70,103 @@ export default function Appointments() {
 
   if (loading) {
     return (
-      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
-        <div className="h-6 w-44 animate-pulse rounded bg-gray-200" />
-        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
-        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
+      <div className="space-y-6">
+        <Card className="animate-pulse"><CardContent className="p-6 h-16" /></Card>
+        <Card className="animate-pulse"><CardContent className="p-6 h-[400px]" /></Card>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={() => loadRows(0, true)}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      <div className="rounded-lg border border-gray-200 bg-white p-4">
-        <select
-          value={statusFilter}
-          onChange={(event) => onStatusChange(event.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 md:w-56"
-        >
-          <option value="all">All</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="cancelled">Cancelled</option>
-          <option value="rescheduled">Rescheduled</option>
-        </select>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Appointments</h1>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
-          No appointments found
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs font-medium uppercase text-gray-500">
-                <th className="px-4 py-3">Contact</th>
-                <th className="px-4 py-3">Date/Time</th>
-                <th className="px-4 py-3">Duration</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Booked</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((appointment) => (
-                <tr key={appointment.id} className="border-b border-gray-100">
-                  <td className="px-4 py-3">
-                    <Link to={`/contacts/${appointment.contact_id}`} className="text-blue-600 hover:underline">
-                      {appointment.contact_name}
-                    </Link>
-                    <p className="text-xs text-gray-500">{appointment.contact_phone}</p>
-                  </td>
-                  <td className="px-4 py-3">{formatSlot(appointment.slot_start)}</td>
-                  <td className="px-4 py-3">
-                    {durationMinutes(appointment.slot_start, appointment.slot_end)} min
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeClass(appointment.status)}`}>
-                      {appointment.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{formatDate(appointment.booked_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {error && (
+        <div className="flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive">
+          <span className="text-sm font-medium">{error}</span>
+          <Button variant="danger" size="sm" onClick={() => loadRows(0, true)}>
+            Retry
+          </Button>
         </div>
       )}
 
-      <button
-        type="button"
-        disabled={!hasMore}
-        onClick={() => loadRows(offset)}
-        className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        Load More
-      </button>
+      <Card>
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <select
+              value={statusFilter}
+              onChange={(event) => onStatusChange(event.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-[200px]"
+            >
+              <option value="all">All Appointments</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="rescheduled">Rescheduled</option>
+            </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="px-0 py-0">
+          {rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+              <p className="text-sm font-medium">No appointments found</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="px-6 py-4">Contact</th>
+                    <th className="px-6 py-4">Date/Time</th>
+                    <th className="px-6 py-4">Duration</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Booked</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {rows.map((appointment) => (
+                    <tr key={appointment.id} className="transition-colors hover:bg-muted/50">
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Link to={`/contacts/${appointment.contact_id}`} className="font-medium text-foreground hover:underline">
+                          {appointment.contact_name || appointment.contact_phone}
+                        </Link>
+                        {appointment.contact_name && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{appointment.contact_phone}</p>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-foreground">{formatSlot(appointment.slot_start)}</td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">
+                        {durationMinutes(appointment.slot_start, appointment.slot_end)} min
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4">
+                        <Badge variant={getBadgeVariant(appointment.status) as any}>
+                          {appointment.status}
+                        </Badge>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">{formatDate(appointment.booked_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-center">
+        <Button
+          variant="secondary"
+          onClick={() => loadRows(offset)}
+          disabled={!hasMore}
+          className="w-full sm:w-auto"
+        >
+          Load More
+        </Button>
+      </div>
     </div>
   )
 }

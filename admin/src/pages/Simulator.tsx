@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api } from '../api'
+import { Card, CardHeader, CardContent } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
+import { Input } from '../components/ui/Input'
+import { Button } from '../components/ui/Button'
 
 type ChatMessage = {
   id: string
@@ -88,80 +92,117 @@ export default function Simulator() {
   const renderMessage = (message: ChatMessage) => {
     if (message.role === 'system') {
       return (
-        <div key={message.id} className="text-center">
-          <div className="inline-block rounded-xl bg-red-100 px-3 py-2 text-sm text-red-700">
+        <div key={message.id} className="text-center my-4">
+          <div className="inline-block rounded-lg bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive">
             {message.body}
           </div>
-          <p className="mt-1 text-xs text-gray-400">{new Date(message.ts).toLocaleTimeString()}</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">{new Date(message.ts).toLocaleTimeString()}</p>
         </div>
       )
     }
 
     const isUser = message.role === 'user'
     return (
-      <div key={message.id} className={isUser ? 'text-right' : 'text-left'}>
+      <div key={message.id} className={`flex w-full flex-col ${isUser ? 'items-end' : 'items-start'} my-2`}>
         <div
-          className={`inline-block max-w-[80%] px-4 py-2 text-sm ${
+          className={`relative max-w-[80%] px-4 py-2.5 text-sm shadow-sm ${
             isUser
-              ? 'rounded-2xl rounded-br-sm bg-blue-500 text-white'
-              : 'rounded-2xl rounded-bl-sm bg-gray-200 text-gray-900'
+              ? 'rounded-2xl rounded-br-sm bg-blue-600 text-white dark:bg-blue-600'
+              : 'rounded-2xl rounded-bl-sm bg-muted text-foreground'
           }`}
         >
           {message.body}
         </div>
-        <p className="mt-1 text-xs text-gray-400">{new Date(message.ts).toLocaleTimeString()}</p>
+        <p className="mt-1.5 px-1 text-[11px] font-medium text-muted-foreground">
+          {new Date(message.ts).toLocaleTimeString()}
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-9rem)] items-center justify-center p-2">
-      <div className="flex h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-300 bg-white shadow-sm">
-        <div className="space-y-3 border-b border-gray-200 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <input
-              type="text"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            />
-            <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800">
-              {conversationState}
-            </span>
+    <div className="flex h-[calc(100vh-8rem)] items-center justify-center pt-2 pb-6">
+      <Card className="flex h-full w-full max-w-lg flex-col overflow-hidden shadow-lg border-border">
+        <CardHeader className="border-b border-border bg-card/50 p-4 backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex-1">
+              <Input
+                type="text"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                className="h-8 w-full max-w-[180px] bg-background text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant={conversationState === 'idle' ? 'secondary' : 'default'} className="hidden sm:inline-flex">
+                {conversationState.replace('_', ' ')}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMessages([])}
+                className="h-8 text-xs font-medium text-muted-foreground"
+              >
+                Clear
+              </Button>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setMessages([])}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Clear Chat
-          </button>
-        </div>
+        </CardHeader>
 
-        <div className="flex-1 space-y-3 overflow-y-auto bg-gray-50 p-4">
-          {messages.map(renderMessage)}
-          {typingMessage && renderMessage(typingMessage)}
-          <div ref={bottomRef} />
-        </div>
+        <CardContent className="flex-1 overflow-y-auto bg-background/50 p-4 scroll-smooth">
+          {messages.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+              <div className="mb-3 rounded-full bg-muted p-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                  <path d="M3.27 6.96 12 12.01l8.73-5.05" />
+                  <path d="M12 22.08V12" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium">Simulator Ready</p>
+              <p className="text-xs">Type a message below to start</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1">
+                {messages.map(renderMessage)}
+                {typingMessage && renderMessage(typingMessage)}
+              </div>
+              <div ref={bottomRef} className="h-4" />
+            </>
+          )}
+        </CardContent>
 
-        <form className="flex items-center gap-2 border-t border-gray-200 p-4" onSubmit={onSend}>
-          <input
-            type="text"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            placeholder="Type a message..."
-            disabled={sending}
-          />
-          <button
-            type="submit"
-            disabled={sending || !input.trim()}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Send
-          </button>
-        </form>
-      </div>
+        <div className="border-t border-border bg-card p-4">
+          <form className="flex items-center gap-2" onSubmit={onSend}>
+            <Input
+              type="text"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="Type a message..."
+              disabled={sending}
+              className="flex-1 rounded-full bg-muted/50 px-4 focus-visible:bg-background"
+            />
+            <Button
+              type="submit"
+              disabled={sending || !input.trim()}
+              className="rounded-full px-5 shadow-none"
+            >
+              Send
+            </Button>
+          </form>
+        </div>
+      </Card>
     </div>
   )
 }

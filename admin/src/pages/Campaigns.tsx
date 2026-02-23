@@ -2,20 +2,24 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, type Campaign } from '../api'
 import { formatDate } from '../utils'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
 
-function statusClass(status: string): string {
-  if (status === 'scheduled') return 'bg-blue-100 text-blue-800'
-  if (status === 'active') return 'bg-green-100 text-green-800'
-  if (status === 'paused') return 'bg-yellow-100 text-yellow-800'
-  if (status === 'completed') return 'bg-gray-700 text-white'
-  return 'bg-gray-100 text-gray-800'
+function getStatusVariant(status: string) {
+  if (status === 'scheduled') return 'default'
+  if (status === 'active') return 'success'
+  if (status === 'paused') return 'warning'
+  if (status === 'completed') return 'secondary'
+  return 'outline'
 }
 
 export default function Campaigns() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [name, setName] = useState('')
   const [template, setTemplate] = useState('')
-  const [showForm, setShowForm] = useState(true)
+  const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [scheduleMap, setScheduleMap] = useState<Record<string, string>>({})
@@ -48,6 +52,7 @@ export default function Campaigns() {
       })
       setName('')
       setTemplate('')
+      setShowForm(false)
       await loadCampaigns()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create campaign')
@@ -66,74 +71,81 @@ export default function Campaigns() {
 
   if (loading) {
     return (
-      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
-        <div className="h-6 w-44 animate-pulse rounded bg-gray-200" />
-        <div className="h-20 w-full animate-pulse rounded bg-gray-200" />
-        <div className="h-20 w-full animate-pulse rounded bg-gray-200" />
+      <div className="space-y-6">
+        <div className="h-10 w-full animate-pulse rounded bg-muted max-w-[200px]" />
+        <Card className="animate-pulse"><CardContent className="p-6 h-32" /></Card>
+        <Card className="animate-pulse"><CardContent className="p-6 h-32" /></Card>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Campaigns</h1>
+        <Button onClick={() => setShowForm(!showForm)}>
+          {showForm ? 'Cancel' : 'New Campaign'}
+        </Button>
+      </div>
+
       {error && (
-        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={loadCampaigns}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-          >
+        <div className="flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive">
+          <span className="text-sm font-medium">{error}</span>
+          <Button variant="danger" size="sm" onClick={loadCampaigns}>
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Campaigns</h1>
-        <button
-          type="button"
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          onClick={() => setShowForm((open) => !open)}
-        >
-          New Campaign
-        </button>
-      </div>
-
       {showForm && (
-        <form className="space-y-3 rounded-lg border border-gray-200 bg-white p-4" onSubmit={onCreate}>
-          <input
-            type="text"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Campaign name"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
-            required
-          />
-          <textarea
-            value={template}
-            onChange={(event) => setTemplate(event.target.value)}
-            placeholder="Message template"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900"
-            rows={4}
-            required
-          />
-          <p className="text-xs text-gray-500">Use {'{first_name}'} and {'{last_name}'} for personalization</p>
-          <button
-            type="submit"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Create Campaign
-          </button>
-        </form>
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="text-lg">Create New Campaign</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={onCreate}>
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-foreground">Campaign Name</label>
+                <Input
+                  type="text"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="e.g. Spring Promo"
+                  className="bg-background"
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <label className="text-sm font-medium text-foreground">Message Template</label>
+                  <span className="text-xs text-muted-foreground">Use {'{first_name}'}, {'{last_name}'}</span>
+                </div>
+                <textarea
+                  value={template}
+                  onChange={(event) => setTemplate(event.target.value)}
+                  placeholder="Hi {first_name}, time for your spring tune-up!"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  rows={4}
+                  required
+                />
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button type="submit">Create Campaign</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
       {campaigns.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
-          No campaigns yet. Create one above.
-        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground">
+            <p className="text-sm font-medium">No campaigns yet</p>
+            <p className="text-xs mt-1">Create one using the button above</p>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="grid gap-6">
           {campaigns.map((campaign) => {
             const deliveredWidth =
               campaign.total_recipients > 0
@@ -151,85 +163,86 @@ export default function Campaigns() {
               campaign.total_recipients > 0 ? (sentPending / campaign.total_recipients) * 100 : 0
 
             return (
-              <article key={campaign.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-lg font-semibold text-gray-900">{campaign.name}</h2>
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusClass(campaign.status)}`}>
-                    {campaign.status}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm text-gray-500">Created {formatDate(campaign.created_at)}</p>
-                <p className="mt-3 text-sm text-gray-700">
-                  Recipients: {campaign.total_recipients} | Sent: {campaign.sent_count} | Delivered:{' '}
-                  {campaign.delivered_count} | Failed: {campaign.failed_count} | Replies:{' '}
-                  {campaign.reply_count}
-                </p>
+              <Card key={campaign.id}>
+                <CardContent className="p-6">
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4">
+                    <div>
+                      <h2 className="text-lg font-semibold text-foreground flex items-center gap-3">
+                        {campaign.name}
+                        <Badge variant={getStatusVariant(campaign.status) as any}>
+                          {campaign.status}
+                        </Badge>
+                      </h2>
+                      <p className="mt-1 text-xs text-muted-foreground">Created {formatDate(campaign.created_at)}</p>
+                    </div>
 
-                {campaign.total_recipients > 0 && (
-                  <div className="mt-3 h-3 w-full overflow-hidden rounded bg-gray-100">
-                    <div className="flex h-full">
-                      <div className="bg-green-500" style={{ width: `${deliveredWidth}%` }} />
-                      <div className="bg-blue-500" style={{ width: `${sentPendingWidth}%` }} />
-                      <div className="bg-red-500" style={{ width: `${failedWidth}%` }} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {campaign.status === 'draft' && (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="datetime-local"
+                            value={scheduleMap[campaign.id] || ''}
+                            onChange={(event) =>
+                              setScheduleMap((prev) => ({ ...prev, [campaign.id]: event.target.value }))
+                            }
+                            className="h-9 w-auto text-xs"
+                          />
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() =>
+                              transitionCampaign(
+                                campaign.id,
+                                'scheduled',
+                                scheduleMap[campaign.id] ? new Date(scheduleMap[campaign.id]).toISOString() : undefined,
+                              )
+                            }
+                          >
+                            Schedule
+                          </Button>
+                        </div>
+                      )}
+                      {campaign.status === 'scheduled' && (
+                        <Button variant="secondary" size="sm" onClick={() => transitionCampaign(campaign.id, 'active')}>
+                          Activate Now
+                        </Button>
+                      )}
+                      {campaign.status === 'active' && (
+                        <Button variant="secondary" size="sm" onClick={() => transitionCampaign(campaign.id, 'paused')}>
+                          Pause
+                        </Button>
+                      )}
+                      {campaign.status === 'paused' && (
+                        <Button variant="primary" size="sm" onClick={() => transitionCampaign(campaign.id, 'active')}>
+                          Resume
+                        </Button>
+                      )}
                     </div>
                   </div>
-                )}
 
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  {campaign.status === 'draft' && (
-                    <>
-                      <input
-                        type="datetime-local"
-                        value={scheduleMap[campaign.id] || ''}
-                        onChange={(event) =>
-                          setScheduleMap((prev) => ({ ...prev, [campaign.id]: event.target.value }))
-                        }
-                        className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-                      />
-                      <button
-                        type="button"
-                        className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-                        onClick={() =>
-                          transitionCampaign(
-                            campaign.id,
-                            'scheduled',
-                            scheduleMap[campaign.id] ? new Date(scheduleMap[campaign.id]).toISOString() : undefined,
-                          )
-                        }
-                      >
-                        Schedule
-                      </button>
-                    </>
-                  )}
-                  {campaign.status === 'scheduled' && (
-                    <button
-                      type="button"
-                      className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-                      onClick={() => transitionCampaign(campaign.id, 'active')}
-                    >
-                      Activate
-                    </button>
-                  )}
-                  {campaign.status === 'active' && (
-                    <button
-                      type="button"
-                      className="rounded-md bg-yellow-600 px-3 py-2 text-sm font-medium text-white hover:bg-yellow-700"
-                      onClick={() => transitionCampaign(campaign.id, 'paused')}
-                    >
-                      Pause
-                    </button>
-                  )}
-                  {campaign.status === 'paused' && (
-                    <button
-                      type="button"
-                      className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-                      onClick={() => transitionCampaign(campaign.id, 'active')}
-                    >
-                      Resume
-                    </button>
-                  )}
-                </div>
-              </article>
+                  <div className="pt-4">
+                    <div className="flex justify-between text-sm font-medium mb-2">
+                      <span className="text-foreground">{campaign.total_recipients} Recipients</span>
+                      <span className="text-muted-foreground">{campaign.reply_count} Replies</span>
+                    </div>
+
+                    {campaign.total_recipients > 0 ? (
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted flex">
+                        <div className="bg-green-500 transition-all duration-500" style={{ width: `${deliveredWidth}%` }} />
+                        <div className="bg-blue-500 transition-all duration-500" style={{ width: `${sentPendingWidth}%` }} />
+                        <div className="bg-red-500 transition-all duration-500" style={{ width: `${failedWidth}%` }} />
+                      </div>
+                    ) : (
+                      <div className="h-2 w-full rounded-full bg-muted" />
+                    )}
+                    
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                      <span>{campaign.delivered_count} Delivered</span>
+                      <span>{campaign.failed_count} Failed</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )
           })}
         </div>

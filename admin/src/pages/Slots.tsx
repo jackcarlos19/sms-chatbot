@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, type Slot } from '../api'
+import { Card, CardContent } from '../components/ui/Card'
+import { Button } from '../components/ui/Button'
 
 function startOfWeek(date: Date): Date {
   const d = new Date(date)
@@ -75,98 +77,126 @@ export default function Slots() {
 
   if (loading) {
     return (
-      <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
-        <div className="h-6 w-40 animate-pulse rounded bg-gray-200" />
-        <div className="h-10 w-full animate-pulse rounded bg-gray-200" />
-        <div className="h-20 w-full animate-pulse rounded bg-gray-200" />
+      <div className="space-y-6">
+        <Card className="animate-pulse"><CardContent className="p-6 h-16" /></Card>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-7">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Card key={i} className="animate-pulse"><CardContent className="p-4 h-64" /></Card>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Availability</h1>
+      </div>
+
       {error && (
-        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={loadSlots}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-          >
+        <div className="flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive">
+          <span className="text-sm font-medium">{error}</span>
+          <Button variant="danger" size="sm" onClick={loadSlots}>
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white p-4">
-        <button
-          type="button"
-          disabled={!canGoPrev}
-          onClick={() => {
-            const next = new Date(weekStart)
-            next.setDate(next.getDate() - 7)
-            setWeekStart(next)
-          }}
-          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          ← Previous Week
-        </button>
-        <p className="text-sm font-medium text-gray-700">
-          {weekStart.toLocaleDateString()} - {weekEnd.toLocaleDateString()}
-        </p>
-        <button
-          type="button"
-          onClick={() => {
-            const next = new Date(weekStart)
-            next.setDate(next.getDate() + 7)
-            setWeekStart(next)
-          }}
-          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-        >
-          Next Week →
-        </button>
-      </div>
-
-      <p className="text-sm text-gray-600">
-        {availableCount} available / {bookedCount} booked / {weekSlots.length} total this week
-      </p>
+      <Card>
+        <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!canGoPrev}
+              onClick={() => {
+                const next = new Date(weekStart)
+                next.setDate(next.getDate() - 7)
+                setWeekStart(next)
+              }}
+            >
+              ← Previous
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setWeekStart(startOfWeek(new Date()))
+              }}
+            >
+              Today
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const next = new Date(weekStart)
+                next.setDate(next.getDate() + 7)
+                setWeekStart(next)
+              }}
+            >
+              Next →
+            </Button>
+          </div>
+          
+          <div className="text-sm font-medium text-foreground">
+            {weekStart.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })} -{' '}
+            {weekEnd.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
+          </div>
+          
+          <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground">
+            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500"></div> {availableCount} Available</span>
+            <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-muted-foreground"></div> {bookedCount} Booked</span>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-7">
         {weekDays.map((day) => {
           const key = dayKey(day)
           const slots = grouped[key] ?? []
+          const isToday = dayKey(new Date()) === key
+          
           return (
-            <div key={key} className="rounded-lg border border-gray-200 bg-white p-3">
-              <h3 className="mb-2 text-sm font-semibold text-gray-900">
-                {day.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
-              </h3>
-              {slots.length === 0 ? (
-                <p className="text-xs italic text-gray-400">No slots</p>
-              ) : (
-                <div className="space-y-2">
-                  {slots.map((slot) => (
+            <Card key={key} className={`border ${isToday ? 'border-primary shadow-sm' : 'border-border'}`}>
+              <div className={`p-3 text-center border-b border-border ${isToday ? 'bg-primary/5 text-primary' : 'bg-muted/30 text-foreground'}`}>
+                <h3 className="text-sm font-semibold">
+                  {day.toLocaleDateString([], { weekday: 'short' })}
+                </h3>
+                <p className="text-xs mt-0.5 opacity-80">
+                  {day.toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                </p>
+              </div>
+              <CardContent className="p-2 space-y-2 max-h-[600px] overflow-y-auto min-h-[100px]">
+                {slots.length === 0 ? (
+                  <div className="flex h-full items-center justify-center py-4">
+                    <p className="text-xs text-muted-foreground italic">No slots</p>
+                  </div>
+                ) : (
+                  slots.map((slot) => (
                     <div
                       key={slot.id}
-                      className={`rounded-md border-l-4 p-2 text-xs ${
+                      className={`rounded-md p-2 text-xs font-medium border-l-2 transition-colors ${
                         slot.is_available
-                          ? 'border-l-green-500 bg-white text-gray-800'
-                          : 'border-l-red-500 bg-gray-100 text-gray-500 line-through'
+                          ? 'border-l-green-500 bg-green-500/5 text-foreground hover:bg-green-500/10'
+                          : 'border-l-muted-foreground bg-muted text-muted-foreground line-through opacity-70'
                       }`}
                     >
                       {new Date(slot.start_time).toLocaleTimeString([], {
                         hour: 'numeric',
                         minute: '2-digit',
-                      })}{' '}
-                      -{' '}
+                      })}
+                      <span className="opacity-50 mx-1">-</span>
                       {new Date(slot.end_time).toLocaleTimeString([], {
                         hour: 'numeric',
                         minute: '2-digit',
                       })}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
           )
         })}
       </div>

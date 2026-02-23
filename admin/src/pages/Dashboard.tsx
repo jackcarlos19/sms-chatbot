@@ -2,12 +2,22 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type AppointmentFull, type Conversation, type DashboardStats } from '../api'
 import { formatDate, formatTime } from '../utils'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card'
+import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
 
-function statusBadge(status: string): string {
-  if (status === 'confirmed') return 'bg-green-100 text-green-800'
-  if (status === 'cancelled') return 'bg-red-100 text-red-800'
-  if (status === 'rescheduled') return 'bg-yellow-100 text-yellow-800'
-  return 'bg-gray-100 text-gray-800'
+function getStatusBadgeVariant(status: string) {
+  if (status === 'confirmed') return 'success'
+  if (status === 'cancelled') return 'destructive'
+  if (status === 'rescheduled') return 'warning'
+  return 'secondary'
+}
+
+function getConversationBadgeVariant(state: string) {
+  if (state === 'idle') return 'secondary'
+  if (state === 'confirmed') return 'success'
+  if (state === 'cancelling') return 'destructive'
+  return 'warning'
 }
 
 export default function Dashboard() {
@@ -44,18 +54,18 @@ export default function Dashboard() {
     return () => window.clearInterval(timer)
   }, [loadData])
 
-  const cardBase = 'rounded-lg border bg-white p-5 shadow-sm'
-
   if (loading) {
     return (
       <div className="space-y-6">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className={`${cardBase} animate-pulse`}>
-              <div className="h-5 w-32 rounded bg-gray-200" />
-              <div className="mt-4 h-10 w-20 rounded bg-gray-200" />
-              <div className="mt-3 h-4 w-24 rounded bg-gray-200" />
-            </div>
+            <Card key={index} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="h-5 w-32 rounded bg-muted" />
+                <div className="mt-4 h-10 w-20 rounded bg-muted" />
+                <div className="mt-3 h-4 w-24 rounded bg-muted" />
+              </CardContent>
+            </Card>
           ))}
         </div>
       </div>
@@ -64,109 +74,142 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
+        {lastUpdated && (
+          <span className="text-xs font-medium text-muted-foreground">
+            Updated {lastUpdated.toLocaleTimeString()}
+          </span>
+        )}
+      </div>
+
       {error && (
-        <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
-          <span>{error}</span>
-          <button
-            type="button"
-            onClick={loadData}
-            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
-          >
+        <div className="flex items-center justify-between rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-destructive">
+          <span className="text-sm font-medium">{error}</span>
+          <Button variant="danger" size="sm" onClick={loadData}>
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <div className={`${cardBase} border-l-4 border-l-blue-500`}>
-          <p className="text-sm text-gray-500">Today's Appointments</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{stats?.appointments_today ?? 0}</p>
-          <p className="mt-2 text-sm text-gray-500">Upcoming: {stats?.appointments_upcoming ?? 0}</p>
-        </div>
-        <div className={`${cardBase} border-l-4 border-l-orange-500`}>
-          <p className="text-sm text-gray-500">Active Conversations</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{stats?.conversations_active ?? 0}</p>
-          <p className="mt-2 text-sm text-gray-500">Total campaigns: {stats?.campaigns_total ?? 0}</p>
-        </div>
-        <div className={`${cardBase} border-l-4 border-l-purple-500`}>
-          <p className="text-sm text-gray-500">Messages Today</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{stats?.messages_today ?? 0}</p>
-          <p className="mt-2 text-sm text-gray-500">
-            ↑{stats?.messages_inbound_today ?? 0} ↓{stats?.messages_outbound_today ?? 0}
-          </p>
-        </div>
-        <div className={`${cardBase} border-l-4 border-l-green-500`}>
-          <p className="text-sm text-gray-500">Total Contacts</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900">{stats?.contacts_total ?? 0}</p>
-          <p className="mt-2 text-sm text-gray-500">{stats?.contacts_opted_in ?? 0} active</p>
-        </div>
+        <Card className="border-l-4 border-l-blue-500">
+          <CardHeader className="pb-2">
+            <CardDescription className="font-medium">Appointments Today</CardDescription>
+            <CardTitle className="text-3xl">{stats?.appointments_today ?? 0}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Upcoming: {stats?.appointments_upcoming ?? 0}</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-l-4 border-l-orange-500">
+          <CardHeader className="pb-2">
+            <CardDescription className="font-medium">Active Conversations</CardDescription>
+            <CardTitle className="text-3xl">{stats?.conversations_active ?? 0}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">Total campaigns: {stats?.campaigns_total ?? 0}</p>
+          </CardContent>
+        </Card>
+        
+        <Card className="border-l-4 border-l-purple-500">
+          <CardHeader className="pb-2">
+            <CardDescription className="font-medium">Messages Today</CardDescription>
+            <CardTitle className="text-3xl">{stats?.messages_today ?? 0}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">
+              <span className="text-green-600 dark:text-green-400">↑{stats?.messages_inbound_today ?? 0}</span> inbound
+              {' · '}
+              <span className="text-blue-600 dark:text-blue-400">↓{stats?.messages_outbound_today ?? 0}</span> outbound
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-green-500">
+          <CardHeader className="pb-2">
+            <CardDescription className="font-medium">Total Contacts</CardDescription>
+            <CardTitle className="text-3xl">{stats?.contacts_total ?? 0}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground">{stats?.contacts_opted_in ?? 0} active</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <p className="text-sm text-gray-500">
-        Last updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : '—'}
-      </p>
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className={cardBase}>
-          <h2 className="text-lg font-semibold text-gray-900">Upcoming Appointments</h2>
-          {appointments.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-500">No upcoming appointments</p>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-xs uppercase text-gray-500">
-                    <th className="px-3 py-2">Contact</th>
-                    <th className="px-3 py-2">Time</th>
-                    <th className="px-3 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {appointments.map((item) => (
-                    <tr key={item.id} className="border-b border-gray-100">
-                      <td className="px-3 py-2">
-                        <Link to={`/contacts/${item.contact_id}`} className="text-blue-600 hover:underline">
-                          {item.contact_name || item.contact_phone}
-                        </Link>
-                      </td>
-                      <td className="px-3 py-2">
-                        {formatDate(item.slot_start)} ({formatTime(item.slot_start)})
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadge(item.status)}`}>
-                          {item.status}
-                        </span>
-                      </td>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Upcoming Appointments</CardTitle>
+          </CardHeader>
+          <CardContent className="px-0 pt-0">
+            {appointments.length === 0 ? (
+              <p className="px-6 pb-6 text-sm text-muted-foreground">No upcoming appointments</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-y border-border bg-muted/50 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      <th className="px-6 py-3">Contact</th>
+                      <th className="px-6 py-3">Time</th>
+                      <th className="px-6 py-3 text-right">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {appointments.map((item) => (
+                      <tr key={item.id} className="transition-colors hover:bg-muted/50">
+                        <td className="px-6 py-3">
+                          <Link to={`/contacts/${item.contact_id}`} className="font-medium text-foreground hover:underline">
+                            {item.contact_name || item.contact_phone}
+                          </Link>
+                        </td>
+                        <td className="whitespace-nowrap px-6 py-3 text-muted-foreground">
+                          {formatDate(item.slot_start)}
+                          <span className="ml-1 hidden text-xs sm:inline">({formatTime(item.slot_start)})</span>
+                        </td>
+                        <td className="px-6 py-3 text-right">
+                          <Badge variant={getStatusBadgeVariant(item.status) as any}>
+                            {item.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        <section className={cardBase}>
-          <h2 className="text-lg font-semibold text-gray-900">Active Conversations</h2>
-          {conversations.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-500">No active conversations</p>
-          ) : (
-            <ul className="mt-4 space-y-3">
-              {conversations.map((item) => (
-                <li key={item.id} className="rounded-md border border-gray-200 px-3 py-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <Link to={`/contacts/${item.contact_id}`} className="text-sm font-medium text-blue-600 hover:underline">
-                      {item.contact_phone}
-                    </Link>
-                    <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-800">
-                      {item.current_state}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">Last message: {formatDate(item.last_message_at)}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Active Conversations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {conversations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No active conversations</p>
+            ) : (
+              <ul className="space-y-4">
+                {conversations.map((item) => (
+                  <li key={item.id} className="flex flex-col justify-between gap-x-6 border-b border-border pb-4 last:border-0 last:pb-0 sm:flex-row sm:items-center">
+                    <div className="flex flex-col">
+                      <Link to={`/contacts/${item.contact_id}`} className="text-sm font-medium text-foreground hover:underline">
+                        {item.contact_phone}
+                      </Link>
+                      <p className="mt-1 text-xs text-muted-foreground">Last message: {formatDate(item.last_message_at)}</p>
+                    </div>
+                    <div className="mt-2 sm:mt-0">
+                      <Badge variant={getConversationBadgeVariant(item.current_state) as any}>
+                        {item.current_state.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

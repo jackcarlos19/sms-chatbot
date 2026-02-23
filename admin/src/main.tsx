@@ -1,13 +1,21 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
-import App from './App'
+import { createRouter, RouterProvider } from '@tanstack/react-router'
+import { setRedirectOnUnauthorized } from './lib/api'
+import { routeTree } from './routeTree.gen'
 import './index.css'
+
+const router = createRouter({
+  routeTree,
+  basepath: '/admin',
+})
+
+setRedirectOnUnauthorized(() => {
+  router.navigate({ to: '/sign-in' })
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter basename="/admin">
-      <App />
-    </BrowserRouter>
-  </StrictMode>,
+    <RouterProvider router={router} />
+  </StrictMode>
 )

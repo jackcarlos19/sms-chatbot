@@ -1,40 +1,7 @@
-type ApiFetchOptions = RequestInit
+import { apiFetch } from './lib/api'
 
-function getCookie(name: string): string {
-  const escaped = name.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&')
-  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : ''
-}
-
-export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  const headers = new Headers(options.headers ?? {})
-  const method = (options.method || 'GET').toUpperCase()
-
-  if (!headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json')
-  }
-  if (method !== 'GET' && method !== 'HEAD') {
-    const csrf = getCookie('admin_csrf')
-    if (csrf) headers.set('X-CSRF-Token', csrf)
-  }
-
-  const response = await fetch(`/api${normalizedPath}`, {
-    ...options,
-    headers,
-    credentials: 'include',
-  })
-
-  if (response.status === 401) {
-    throw new Error('401 Unauthorized')
-  }
-
-  if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`)
-  }
-
-  return (await response.json()) as T
-}
+export { apiFetch }
+export type { ApiFetchOptions } from './lib/api'
 
 export interface DashboardStats {
   contacts_total: number;

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 from time import monotonic
 from typing import Optional
 
 import structlog
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import and_, case, func, select
 
@@ -33,6 +37,7 @@ from app.services.sms_service import SMSService
 
 router = APIRouter(prefix="/api", tags=["admin"])
 logger = structlog.get_logger(__name__)
+ADMIN_SESSION_COOKIE = "admin_session"
 
 
 def _display_name(contact: Contact) -> str:
@@ -43,8 +48,71 @@ def _display_name(contact: Contact) -> str:
 
 async def verify_admin_api_key(x_api_key: str = Header(default="")) -> None:
     settings = get_settings()
-    if not settings.admin_api_key or x_api_key != settings.admin_api_key:
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    if settings.admin_api_key and x_api_key == settings.admin_api_key:
+        return
+    raise HTTPException(status_code=401, detail="Invalid API key")
+
+
+def _session_signing_key() -> bytes:
+    settings = get_settings()
+    return settings.admin_session_secret.encode("utf-8")
+
+
+def _issue_admin_session_token(username: str) -> str:
+    payload = {
+        "admin": True,
+        "username": username,
+        "iat": int(datetime.now(timezone.utc).timestamp()),
+    }
+    payload_raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=True).encode(
+        "utf-8"
+    )
+    payload_b64 = base64.urlsafe_b64encode(payload_raw).decode("utf-8").rstrip("=")
+    signature = hmac.new(
+        _session_signing_key(), payload_b64.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"{payload_b64}.{signature}"
+
+
+def _verify_admin_session_token(token: str) -> bool:
+    if "." not in token:
+        return False
+    payload_b64, signature = token.rsplit(".", 1)
+    expected_signature = hmac.new(
+        _session_signing_key(), payload_b64.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected_signature):
+        return False
+
+    padding = "=" * (-len(payload_b64) % 4)
+    try:
+        payload_raw = base64.urlsafe_b64decode(payload_b64 + padding).decode("utf-8")
+        data = json.loads(payload_raw)
+    except (ValueError, json.JSONDecodeError):
+        return False
+
+    settings = get_settings()
+    issued_at = int(data.get("iat", 0))
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    if issued_at <= 0:
+        return False
+    if now_ts - issued_at > settings.admin_session_max_age_seconds:
+        return False
+    return bool(data.get("admin", False))
+
+
+async def verify_admin_access(
+    request: Request, x_api_key: str = Header(default="")
+) -> None:
+    settings = get_settings()
+    if settings.admin_api_key and x_api_key == settings.admin_api_key:
+        return
+
+    session_token = request.cookies.get(ADMIN_SESSION_COOKIE, "")
+    if session_token and _verify_admin_session_token(session_token):
+        return
+
+    raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 class CampaignCreateRequest(BaseModel):
@@ -61,6 +129,46 @@ class CampaignPatchRequest(BaseModel):
 class SimulateRequest(BaseModel):
     phone_number: str = "+15551234567"
     message: str
+
+
+class AdminLoginRequest(BaseModel):
+    username: str = "admin"
+    password: str
+
+
+@router.post("/admin/auth/login")
+async def admin_login(payload: AdminLoginRequest, response: Response) -> dict:
+    settings = get_settings()
+    # Prefer dedicated admin username/password; fallback to legacy ADMIN_API_KEY.
+    valid_username = payload.username == settings.admin_username
+    valid_password = payload.password == settings.admin_password
+    legacy_password = bool(settings.admin_api_key) and payload.password == settings.admin_api_key
+    if not valid_username or not (valid_password or legacy_password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = _issue_admin_session_token(payload.username)
+    secure_cookie = settings.app_env == "production"
+    response.set_cookie(
+        key=ADMIN_SESSION_COOKIE,
+        value=token,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+        max_age=settings.admin_session_max_age_seconds,
+        path="/",
+    )
+    return {"ok": True, "username": payload.username}
+
+
+@router.post("/admin/auth/logout")
+async def admin_logout(response: Response) -> dict:
+    response.delete_cookie(ADMIN_SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+
+@router.get("/admin/auth/me", dependencies=[Depends(verify_admin_access)])
+async def admin_me() -> dict:
+    return {"authenticated": True}
 
 
 class SimulatorSMSService(SMSService):
@@ -98,7 +206,7 @@ class SimulatorSMSService(SMSService):
             return message
 
 
-@router.get("/dashboard/stats", dependencies=[Depends(verify_admin_api_key)])
+@router.get("/dashboard/stats", dependencies=[Depends(verify_admin_access)])
 async def dashboard_stats() -> dict:
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -230,7 +338,7 @@ async def dashboard_stats() -> dict:
 @router.get(
     "/contacts",
     response_model=list[ContactResponse],
-    dependencies=[Depends(verify_admin_api_key)],
+    dependencies=[Depends(verify_admin_access)],
 )
 async def list_contacts(limit: int = 100, offset: int = 0) -> list[dict]:
     async with AsyncSessionFactory() as session:
@@ -255,7 +363,7 @@ async def list_contacts(limit: int = 100, offset: int = 0) -> list[dict]:
         ]
 
 
-@router.get("/contacts/{contact_id}", dependencies=[Depends(verify_admin_api_key)])
+@router.get("/contacts/{contact_id}", dependencies=[Depends(verify_admin_access)])
 async def get_contact(contact_id: str) -> dict:
     try:
         cid = uuid.UUID(contact_id)
@@ -292,7 +400,7 @@ async def get_contact(contact_id: str) -> dict:
 @router.get(
     "/campaigns",
     response_model=list[CampaignResponse],
-    dependencies=[Depends(verify_admin_api_key)],
+    dependencies=[Depends(verify_admin_access)],
 )
 async def list_campaigns(limit: int = 100, offset: int = 0) -> list[dict]:
     async with AsyncSessionFactory() as session:
@@ -325,7 +433,7 @@ async def list_campaigns(limit: int = 100, offset: int = 0) -> list[dict]:
 @router.post(
     "/campaigns",
     response_model=CampaignCreateResponse,
-    dependencies=[Depends(verify_admin_api_key)],
+    dependencies=[Depends(verify_admin_access)],
 )
 async def create_campaign(payload: CampaignCreateRequest) -> dict:
     from app.api.deps import get_campaign_service
@@ -347,7 +455,7 @@ async def create_campaign(payload: CampaignCreateRequest) -> dict:
 @router.patch(
     "/campaigns/{campaign_id}",
     response_model=CampaignResponse,
-    dependencies=[Depends(verify_admin_api_key)],
+    dependencies=[Depends(verify_admin_access)],
 )
 async def update_campaign(campaign_id: str, payload: CampaignPatchRequest) -> dict:
     cid = uuid.UUID(campaign_id)
@@ -378,7 +486,7 @@ async def update_campaign(campaign_id: str, payload: CampaignPatchRequest) -> di
             }
 
 
-@router.get("/appointments/all", dependencies=[Depends(verify_admin_api_key)])
+@router.get("/appointments/all", dependencies=[Depends(verify_admin_access)])
 async def list_all_appointments(
     limit: int = 50, offset: int = 0, status: Optional[str] = None
 ) -> list[dict]:
@@ -411,7 +519,7 @@ async def list_all_appointments(
 @router.get(
     "/appointments",
     response_model=list[AppointmentResponse],
-    dependencies=[Depends(verify_admin_api_key)],
+    dependencies=[Depends(verify_admin_access)],
 )
 async def list_appointments(contact_id: str) -> list[dict]:
     cid = uuid.UUID(contact_id)
@@ -440,7 +548,7 @@ async def list_appointments(contact_id: str) -> list[dict]:
         ]
 
 
-@router.get("/conversations", dependencies=[Depends(verify_admin_api_key)])
+@router.get("/conversations", dependencies=[Depends(verify_admin_access)])
 async def list_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
     async with AsyncSessionFactory() as session:
         result = await session.execute(
@@ -467,7 +575,7 @@ async def list_conversations(limit: int = 50, offset: int = 0) -> list[dict]:
         ]
 
 
-@router.get("/slots", dependencies=[Depends(verify_admin_api_key)])
+@router.get("/slots", dependencies=[Depends(verify_admin_access)])
 async def list_slots(days_ahead: int = 7) -> list[dict]:
     now = datetime.now(timezone.utc)
     end = now + timedelta(days=days_ahead)
@@ -499,7 +607,7 @@ async def list_slots(days_ahead: int = 7) -> list[dict]:
 @router.get(
     "/messages",
     response_model=list[MessageResponse],
-    dependencies=[Depends(verify_admin_api_key)],
+    dependencies=[Depends(verify_admin_access)],
 )
 async def list_messages(contact_id: str) -> list[dict]:
     cid = uuid.UUID(contact_id)
@@ -528,7 +636,7 @@ async def list_messages(contact_id: str) -> list[dict]:
 
 @router.post(
     "/simulate/inbound",
-    dependencies=[Depends(verify_admin_api_key)],
+    dependencies=[Depends(verify_admin_access)],
 )
 async def simulate_inbound(payload: SimulateRequest) -> dict:
     started_at = monotonic()

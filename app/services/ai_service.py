@@ -39,10 +39,16 @@ class IntentResult:
 class AIService:
     def __init__(self, client: Optional[AsyncOpenAI] = None) -> None:
         self._settings = get_settings()
-        self._client = client or AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=self._settings.openrouter_api_key,
-        )
+        self._client = client or self._build_client()
+
+    def _build_client(self) -> AsyncOpenAI:
+        if self._settings.ai_provider == "vercel_gateway":
+            base_url = self._settings.ai_base_url or "https://ai-gateway.vercel.sh/v1"
+            api_key = self._settings.vercel_ai_gateway_api_key
+            return AsyncOpenAI(base_url=base_url, api_key=api_key)
+
+        base_url = self._settings.ai_base_url or "https://openrouter.ai/api/v1"
+        return AsyncOpenAI(base_url=base_url, api_key=self._settings.openrouter_api_key)
 
     async def detect_intent(
         self,

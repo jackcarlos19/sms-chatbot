@@ -213,6 +213,84 @@ async def retry_failed_sends(ctx: dict) -> int:  # noqa: ARG001
     return retried
 
 
+async def send_appointment_reminders(ctx: dict) -> int:  # noqa: ARG001
+    """Send SMS reminders ~24 hours before confirmed appointments.
+
+    Runs every 30 minutes. Finds appointments with slots starting between
+    23.5 and 24.5 hours from now, skips opted-out contacts and avoids sending
+    duplicate reminders in the prior 25 hours.
+    """
+    from zoneinfo import ZoneInfo
+
+    from sqlalchemy import and_, func, select
+
+    from app.models.appointment import Appointment
+    from app.models.availability import AvailabilitySlot
+
+    now = datetime.now(timezone.utc)
+    window_start = now + timedelta(hours=23, minutes=30)
+    window_end = now + timedelta(hours=24, minutes=30)
+    sent_count = 0
+    sms_service = SMSService()
+
+    async with AsyncSessionFactory() as session:
+        query = (
+            select(Appointment, AvailabilitySlot, Contact)
+            .join(AvailabilitySlot, Appointment.slot_id == AvailabilitySlot.id)
+            .join(Contact, Appointment.contact_id == Contact.id)
+            .where(
+                and_(
+                    Appointment.status == "confirmed",
+                    AvailabilitySlot.start_time >= window_start,
+                    AvailabilitySlot.start_time <= window_end,
+                    Contact.opt_in_status != "opted_out",
+                )
+            )
+        )
+        results = await session.execute(query)
+        rows = results.all()
+
+        for appointment, slot, contact in rows:
+            cutoff = now - timedelta(hours=25)
+            existing = await session.execute(
+                select(func.count()).select_from(Message).where(
+                    Message.contact_id == contact.id,
+                    Message.direction == "outbound",
+                    Message.body.ilike("%reminder%"),
+                    Message.created_at >= cutoff,
+                )
+            )
+            if existing.scalar_one() > 0:
+                continue
+
+            try:
+                local_time = slot.start_time.astimezone(
+                    ZoneInfo(contact.timezone or "UTC")
+                )
+            except Exception:  # noqa: BLE001
+                local_time = slot.start_time
+
+            time_str = local_time.strftime("%A, %B %d at %-I:%M %p")
+            body = (
+                f"Reminder: You have an appointment tomorrow, {time_str}. "
+                "Reply RESCHEDULE to change or CANCEL to cancel."
+            )
+
+            try:
+                await sms_service.send_message(to=contact.phone_number, body=body)
+                sent_count += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "reminder_send_failed",
+                    appointment_id=str(appointment.id),
+                    contact_id=str(contact.id),
+                    error=str(exc),
+                )
+
+    logger.info("appointment_reminders_sent", count=sent_count)
+    return sent_count
+
+
 def _parse_redis_url(url: str) -> RedisSettings:
     """Parse redis://host:port/db into arq RedisSettings."""
     from urllib.parse import urlparse
@@ -229,10 +307,16 @@ class WorkerSettings:
     settings = get_settings()
     redis_settings = _parse_redis_url(settings.redis_url)
 
-    functions = [expire_conversations, process_campaign_batch, retry_failed_sends]
+    functions = [
+        expire_conversations,
+        process_campaign_batch,
+        retry_failed_sends,
+        send_appointment_reminders,
+    ]
     cron_jobs = [
         cron(
             expire_conversations, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}
         ),
         cron(retry_failed_sends, minute={0, 10, 20, 30, 40, 50}),
+        cron(send_appointment_reminders, minute={0, 30}),
     ]

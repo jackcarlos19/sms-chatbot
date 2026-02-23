@@ -6,7 +6,7 @@ services:
     environment:
       - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
     ports:
-      - "4040:4040"
+      - "${NGROK_DASHBOARD_PORT:-4041}:4040"
     depends_on:
       - app
 

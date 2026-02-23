@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from time import monotonic
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
@@ -52,8 +53,17 @@ class ConversationService:
         """
         # Per-contact lock prevents race conditions from rapid sequential messages.
         # If Redis is unavailable, proceed without lock (best-effort).
+        started_at = monotonic()
         lock_key = f"conversation_lock:{phone_number}"
         lock_acquired = False
+        logger.info(
+            "conversation_process_started",
+            phone=mask_phone_number(phone_number),
+            sms_sid=sms_sid,
+            body_preview=(body or "")[:80],
+            body_len=len(body or ""),
+            redis_lock_enabled=bool(self._redis),
+        )
         if self._redis:
             try:
                 lock_acquired = await self._redis.set(
@@ -77,6 +87,12 @@ class ConversationService:
                     await self._redis.delete(lock_key)
                 except Exception:  # noqa: BLE001
                     pass  # Lock will expire via TTL
+            logger.info(
+                "conversation_process_finished",
+                phone=mask_phone_number(phone_number),
+                sms_sid=sms_sid,
+                elapsed_ms=round((monotonic() - started_at) * 1000, 2),
+            )
 
     async def _process_message_locked(
         self, phone_number: str, body: str, sms_sid: str
@@ -110,14 +126,33 @@ class ConversationService:
             state = await self._get_or_create_state(session, contact.id)
             context = dict(state.context or {})
             history = list(context.get("history", []))
+            current_state = state.current_state or "idle"
+            logger.info(
+                "conversation_state_loaded",
+                phone=mask_phone_number(phone_number),
+                sms_sid=sms_sid,
+                state=current_state,
+                history_len=len(history),
+                context_keys=sorted(list(context.keys())),
+            )
 
             # Dispatch to the appropriate state handler
             next_state, response_text, next_context = await self._dispatch_state_handler(
-                current_state=state.current_state or "idle",
+                current_state=current_state,
                 contact=contact,
                 message=normalized_body,
                 context=context,
                 history=history,
+            )
+            logger.info(
+                "conversation_state_transition",
+                phone=mask_phone_number(phone_number),
+                sms_sid=sms_sid,
+                from_state=current_state,
+                to_state=next_state,
+                response_len=len(response_text or ""),
+                retry_count=next_context.get("retry_count"),
+                last_intent=next_context.get("last_intent"),
             )
 
             # Update conversation state within the same session
@@ -304,6 +339,14 @@ class ConversationService:
         )
         if selected_slot_id is None:
             retry_count = int(context.get("retry_count", 0)) + 1
+            logger.info(
+                "slot_selection_unmatched",
+                contact_id=str(contact.id),
+                state="showing_slots",
+                presented_count=len(presented),
+                retry_count=retry_count,
+                message_preview=(message or "")[:80],
+            )
             if retry_count >= MAX_RETRIES:
                 return (
                     "idle",
@@ -464,6 +507,14 @@ class ConversationService:
         )
         if selected_slot_id is None:
             retry_count = int(context.get("retry_count", 0)) + 1
+            logger.info(
+                "slot_selection_unmatched",
+                contact_id=str(contact.id),
+                state="reschedule_show_slots",
+                presented_count=len(presented),
+                retry_count=retry_count,
+                message_preview=(message or "")[:80],
+            )
             if retry_count >= MAX_RETRIES:
                 return (
                     "idle",
@@ -612,7 +663,8 @@ class ConversationService:
         context: dict[str, Any],
     ) -> IntentResult:
         available_slots = context.get("presented_slots", [])
-        return await self._ai.detect_intent(
+        started_at = monotonic()
+        result = await self._ai.detect_intent(
             message=message,
             conversation_history=history,
             available_slots=available_slots,
@@ -620,6 +672,16 @@ class ConversationService:
             conversation_state=context.get("last_state", "idle"),
             contact_timezone=contact.timezone,
         )
+        logger.info(
+            "intent_detected",
+            contact_id=str(contact.id),
+            intent=result.intent,
+            confidence=result.confidence,
+            needs_info_count=len(result.needs_info or []),
+            available_slots_count=len(available_slots or []),
+            elapsed_ms=round((monotonic() - started_at) * 1000, 2),
+        )
+        return result
 
     @staticmethod
     def _append_history(

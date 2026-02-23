@@ -171,3 +171,49 @@ The admin frontend is automatically built into the Docker image via multi-stage 
 
 ### Authentication
 Enter your `ADMIN_API_KEY` (from `.env`) at the login screen.
+
+## Production Deployment (VPS + Permanent Domain)
+
+This project supports a VPS deployment pattern with Caddy TLS termination and Docker Compose.
+
+### 1) DNS
+- Point your domain `A` record to your VPS public IP.
+- Optional: point `www` to the same IP.
+
+### 2) Server prerequisites
+- Ubuntu 22.04+ (or similar)
+- Docker Engine + Docker Compose plugin
+- Firewall allowing only `22`, `80`, and `443`
+
+### 3) Production environment
+Set these values in `.env` on the server:
+- `DOMAIN`
+- `ADMIN_API_KEY`
+- `ADMIN_SESSION_SECRET`
+- `OPENROUTER_API_KEY` and/or `VERCEL_AI_GATEWAY_API_KEY`
+- `AI_PROVIDER` (`openrouter` or `vercel_gateway`)
+
+### 4) Start production stack
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+### 5) Run deploy helper
+```bash
+export DOMAIN=yourdomain.com
+./scripts/deploy_prod.sh
+./scripts/healthcheck_prod.sh
+```
+
+### 6) Verify
+- `https://yourdomain.com/api/health`
+- `https://yourdomain.com/admin`
+
+## Admin Auth (Server Session)
+
+Admin access now uses a server-side session cookie:
+- Login endpoint: `POST /api/admin/auth/login`
+- Logout endpoint: `POST /api/admin/auth/logout`
+- Session check: `GET /api/admin/auth/me`
+
+The backend still accepts `X-API-Key` for compatibility, but web UI auth should use session login.

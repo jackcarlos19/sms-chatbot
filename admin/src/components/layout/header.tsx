@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Link } from '@tanstack/react-router'
 import { SidebarTrigger } from './sidebar'
 import { Separator } from '../ui/Separator'
 import { Icons } from '../ui/Icons'
@@ -7,9 +8,13 @@ import { useTheme } from './theme-provider'
 export function Header({
   title,
   className = '',
+  backTo,
+  backLabel = 'Back',
 }: {
   title: string
   className?: string
+  backTo?: string
+  backLabel?: string
 }) {
   const { theme, toggleTheme } = useTheme()
   const [healthy, setHealthy] = React.useState<boolean | null>(null)
@@ -40,6 +45,17 @@ export function Header({
       <div className="flex items-center gap-4">
         <SidebarTrigger />
         <Separator orientation="vertical" className="h-5" />
+        {backTo && (
+          <>
+            <Link
+              to={backTo}
+              className="inline-flex h-8 items-center justify-center rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {backLabel}
+            </Link>
+            <Separator orientation="vertical" className="h-5" />
+          </>
+        )}
         <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
       </div>
       <div className="flex items-center gap-4">
